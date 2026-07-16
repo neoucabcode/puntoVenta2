@@ -1,0 +1,25 @@
+# Graphify working outputs (regenerable, not source)
+graphify-out/
+
+# Environment / secrets
+.env
+*.env
+.env.local
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / dist
+dist/
+build/
+
+#Logs
+*.log

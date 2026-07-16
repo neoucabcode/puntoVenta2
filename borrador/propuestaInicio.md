@@ -1,0 +1,12 @@
+/docs
+  00-resumen-ejecutivo.md
+  01-supuestos-y-preguntas-abiertas.md
+  02-reglas-de-negocio.md
+  03-modulos-del-sistema.md
+  04-flujos-operativos.md
+  05-roles-y-permisos.md
+  06-modelo-de-datos-conceptual.md
+  07-requisitos-no-funcionales.md
+  08-opciones-de-stack-y-decisiones.md
+  09-roadmap-y-fases.md
+  10-criterios-de-aceptacion.md
