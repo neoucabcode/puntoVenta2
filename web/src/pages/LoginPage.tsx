@@ -1,17 +1,19 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { login } from '../lib/auth'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     try {
       await login(email, password)
-      alert('Sesión iniciada. Falta redirigir al POS (Fase 2 en construcción).')
+      navigate('/')
     } catch (err) {
       setError((err as Error).message)
     }

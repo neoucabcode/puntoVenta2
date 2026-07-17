@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { registro, crearEmpresaConAdmin } from '../lib/auth'
 
 export function RegistroPage() {
@@ -8,6 +9,7 @@ export function RegistroPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
+  const navigate = useNavigate()
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -19,7 +21,7 @@ export function RegistroPage() {
       // 2) Alta atómica empresa + admin vía RPC (reemplaza el flujo roto de
       //    crearEmpresa() suelto, que fallaba por RLS sin usuario vinculado).
       await crearEmpresaConAdmin(nombreEmpresa, user.id, nombreAdmin || 'Admin')
-      setOk(`Empresa "${nombreEmpresa}" creada. Ya podés iniciar sesión.`)
+      navigate('/')
     } catch (err) {
       setError((err as Error).message)
     }
