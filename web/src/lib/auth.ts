@@ -21,3 +21,19 @@ export async function registro(
   if (!data.user) throw new Error('No se creó el usuario')
   return data.user
 }
+
+// Alta atómica empresa + admin vía RPC SECURITY DEFINER (ver patch_01).
+// Debe llamarse ya con sesión iniciada (signUp deja al usuario logueado cuando
+// "Confirm email" está desactivado). El RPC valida auth.uid() internamente.
+export async function crearEmpresaConAdmin(
+  nombreEmpresa: string,
+  userId: string,
+  nombreAdmin: string
+): Promise<void> {
+  const { error } = await supabase.rpc('crear_empresa_con_admin', {
+    p_nombre_empresa: nombreEmpresa,
+    p_auth_user_id: userId,
+    p_nombre_admin: nombreAdmin,
+  })
+  if (error) throw error
+}

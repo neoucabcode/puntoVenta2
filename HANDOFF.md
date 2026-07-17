@@ -46,7 +46,8 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 6. Se desactivó "Confirm email" en el Dashboard (decisión de MVP).
 
 ## Próximos pasos sugeridos (Fase 1 avanzada / MVP) — ORDEN RECOMENDADO
-1. **[SIGUIENTE] Cablear el registro al RPC:** editar `web/src/lib/auth.ts` y `web/src/pages/RegistroPage.tsx` para que el flujo sea: `signUp` → `supabase.rpc('crear_empresa_con_admin', {p_nombre_empresa, p_auth_user_id: user.id, p_nombre_admin})`. Borrar el `crearEmpresa()` suelto que hoy falla por RLS.
+1. **[HECHO] Cablear el registro al RPC:** `auth.ts` ahora tiene `crearEmpresaConAdmin()` que llama `supabase.rpc('crear_empresa_con_admin', ...)`. `RegistroPage.tsx` hace `signUp` → RPC en orden correcto (antes fallaba por RLS con `crearEmpresa()` suelto). Build OK. Falta redirigir tras login (paso 2 del plan: app shell).
+2. **[SIGUIENTE] App shell + guard de sesión + logout:** `main.tsx` solo tiene `/login` y `/registro`; no hay ruta protegida ni logout. Necesario para probar logueado y para el onboarding de sucursales.
 2. **App shell + guard de sesión + logout:** hoy `main.tsx` solo tiene rutas `/login` y `/registro`. No hay pantalla protegida ni forma de cerrar sesión. Necesario para probar cualquier cosa logueado.
 3. **App de edición de catálogo:** pantalla para editar los 86 productos sin precio y subir imágenes faltantes desde la PWA.
 4. **Impresión térmica (ESC/POS):** pendiente desde el inicio.

@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { registro } from '../lib/auth'
-import { crearEmpresa } from '../lib/empresa'
+import { registro, crearEmpresaConAdmin } from '../lib/auth'
 
 export function RegistroPage() {
   const [nombreEmpresa, setNombreEmpresa] = useState('')
+  const [nombreAdmin, setNombreAdmin] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -14,11 +14,12 @@ export function RegistroPage() {
     setError('')
     setOk('')
     try {
-      const user = await registro(email, password, 'Admin')
-      const empresa = await crearEmpresa(nombreEmpresa)
-      // Relacionar usuario con empresa vía metadata (el trigger crea la fila)
-      // Nota: en MVP el alta de la relación requiere script/Edge Function (Fase 4).
-      setOk(`Empresa "${empresa.nombre}" creada. Usuario: ${user.email}`)
+      // 1) Crear usuario de auth (queda logueado si "Confirm email" está off).
+      const user = await registro(email, password, nombreAdmin || 'Admin')
+      // 2) Alta atómica empresa + admin vía RPC (reemplaza el flujo roto de
+      //    crearEmpresa() suelto, que fallaba por RLS sin usuario vinculado).
+      await crearEmpresaConAdmin(nombreEmpresa, user.id, nombreAdmin || 'Admin')
+      setOk(`Empresa "${nombreEmpresa}" creada. Ya podés iniciar sesión.`)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -29,6 +30,7 @@ export function RegistroPage() {
       <form className="card" onSubmit={onSubmit}>
         <h1>Alta de ferretería</h1>
         <input placeholder="Nombre de la ferretería" value={nombreEmpresa} onChange={(e) => setNombreEmpresa(e.target.value)} />
+        <input placeholder="Tu nombre" value={nombreAdmin} onChange={(e) => setNombreAdmin(e.target.value)} />
         <input placeholder="Email admin" value={email} onChange={(e) => setEmail(e.target.value)} />
         <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
         {error && <p className="error">{error}</p>}
