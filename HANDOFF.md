@@ -14,7 +14,9 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 - **Esquema:** `supabase/schema_fase2.sql` YA APLICADO en el proyecto Supabase (`pvopcajqersioqlmccwg`).
 - **Parches SQL aplicados (en orden):**
   - `supabase/patch_01_alta_y_linter.sql` — APLICADO. Fijó `search_path=''` en `es_de_empresa` y `trg_alta_usuario`, quitó política de listado del bucket, blindó el trigger, y creó el RPC `crear_empresa_con_admin(p_nombre_empresa, p_auth_user_id, p_nombre_admin)` (SECURITY DEFINER, guardas `auth.uid()`).
-  - `supabase/patch_02_revoke_definer.sql` — APLICADO. Revocó EXECUTE de funciones internas expuestas (lints 0028/0029). Quedan 2 warnings INTENCIONALES (ver "Notas de método").
+  - `supabase/patch_02_revoke_definer.sql` — APLICADO. Revocó EXECUTE de funciones internas expuestas (lints 0028/0029). Quedan 2 warnings INTENCIONALES.
+  - `supabase/patch_03_clonar_y_stock.sql` — APLICADO (re-aplicado con guarda). Creó `clonar_catalogo(...)` (onboarding selectivo: todo/categorias/lote, precio sugerido|cero, remapeo de categorías, reuso de imágenes) y `trg_descuenta_stock_venta` (descuenta stock CONDICIONAL a `empresa.venta_sin_stock`; si=true modo "ignorar", no toca inventario). Agregó guarda de pertenencia en `clonar_catalogo`.
+  - `supabase/patch_04_revokes_definer.sql` — APLICADO. Revocó funciones de trigger y anon de las nuevas definer. Quedan **3 warnings INTENCIONALES** (ver Regla OBLIGATORIA y Notas de método).
 - **Config del Dashboard aplicada (NO está en el repo, hay que replicar si se cambia de proyecto Supabase):**
   - Authentication → Email → **"Confirm email" DESACTIVADO** (para MVP: el usuario queda logueado al instante tras signUp; el RPC de alta necesita `auth.uid()`).
 - **Catálogo sembrado:** `supabase/seed_catalogo.py` YA EJECUTADO. Resultado: **564 productos** insertados (86 sin precio → `precio_usd=0`, se editan desde la app), **72 imágenes** `.webp` subidas a bucket `productos/` y enlazadas por `imagen_url`. 8 categorías creadas.
@@ -37,23 +39,28 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
    ```
    El asistente NO debe correr comandos que contengan la secret key.
 
-## Último hilo de trabajo (sesión parches SQL, 2026-07-17)
+## Último hilo de trabajo (sesión parches SQL + MVP, 2026-07-17)
 1. Se revisó el estado real: backend sólido, frontend MUY verde (solo Login/Registro/libs, sin app shell ni pantallas que usen los 564 productos).
 2. Se detectó el bug de raíz del registro: `RegistroPage.tsx` + `auth.ts` no vinculaban `empresa_id`; el trigger corría con `empresa_id=NULL` → violaba NOT NULL; y `crearEmpresa()` fallaba por RLS sin usuario vinculado.
 3. Decisión (usuario): resolver el alta con **RPC SECURITY DEFINER** (no Edge Function).
 4. Se creó y aplicó `patch_01_alta_y_linter.sql` (linter + RPC `crear_empresa_con_admin`).
-5. Aparecieron 5 warnings NUEVOS (lints 0028/0029 de Supabase: SECURITY DEFINER expuestas). Se creó y aplicó `patch_02_revoke_definer.sql`. CLAVE: NO se revocó `es_de_empresa` de `authenticated` porque rompería TODAS las políticas RLS (doc PostgreSQL CREATE POLICY). Quedaron 2 warnings intencionales.
+5. Aparecieron warnings NUEVOS (lints 0028/0029 de Supabase: SECURITY DEFINER expuestas). Se creó y aplicó `patch_02_revoke_definer.sql`. CLAVE: NO se revocó `es_de_empresa` de `authenticated` porque rompería TODAS las políticas RLS (doc PostgreSQL CREATE POLICY).
 6. Se desactivó "Confirm email" en el Dashboard (decisión de MVP).
+7. Se decidió el modelo de catálogo SaaS: clon desde empresa maestra a sucursales, propiedad propia, aislamiento RLS. Excel SOLO para el dueño (no en la app).
+8. Chequeo arquitectónico MVP (producto/carrito/registro): el esquema sirve, pero faltaba clonado con remapeo de categorías y descuento de stock condicional (la mayoria de ferreterias NO lleva inventario). Se creó `patch_03_clonar_y_stock.sql`.
+9. Se repitió el error de lints 0028/0029 en patch_03. Se instituyó la REGLA OBLIGATORIA en el HANDOFF (checklist antes de crear funciones definer) y se creó `patch_04_revokes_definer.sql`. Quedaron 3 warnings intencionales.
 
 ## Próximos pasos sugeridos (Fase 1 avanzada / MVP) — ORDEN RECOMENDADO
-1. **[HECHO] Cablear el registro al RPC:** `auth.ts` ahora tiene `crearEmpresaConAdmin()` que llama `supabase.rpc('crear_empresa_con_admin', ...)`. `RegistroPage.tsx` hace `signUp` → RPC en orden correcto (antes fallaba por RLS con `crearEmpresa()` suelto). Build OK. Falta redirigir tras login (paso 2 del plan: app shell).
-2. **[SIGUIENTE] App shell + guard de sesión + logout:** `main.tsx` solo tiene `/login` y `/registro`; no hay ruta protegida ni logout. Necesario para probar logueado y para el onboarding de sucursales.
-2. **App shell + guard de sesión + logout:** hoy `main.tsx` solo tiene rutas `/login` y `/registro`. No hay pantalla protegida ni forma de cerrar sesión. Necesario para probar cualquier cosa logueado.
-3. **App de edición de catálogo:** pantalla para editar los 86 productos sin precio y subir imágenes faltantes desde la PWA.
-4. **Impresión térmica (ESC/POS):** pendiente desde el inicio.
-5. **Offline (IndexedDB + cola):** Fase 4.
-6. **Gap conocido:** `abono.cuenta_por_cobrar_id` apunta a `venta`; el modelo conceptual define `cuenta_por_cobrar` explícita. Corregir en Fase de Crédito.
-7. **Deuda técnica (opcional):** dejar el Security Advisor 100% limpio moviendo `es_de_empresa` a un esquema privado (ej. `private`) no expuesto por la API, y recrear las políticas apuntando a `private.es_de_empresa`. Documentado en `patch_02_revoke_definer.sql`.
+1. **[HECHO] Cablear el registro al RPC:** `auth.ts` tiene `crearEmpresaConAdmin()` que llama el RPC; `RegistroPage.tsx` hace `signUp` → RPC. Build OK.
+2. **[HECHO] Parches SQL BD del MVP:** patch_01 (alta RPC + linter), patch_02 (revokes), patch_03 (clonar_catalogo + stock condicional), patch_04 (revokes). Quedan 3 warnings 0029 intencionales.
+3. **[SIGUIENTE] App shell + guard de sesión + logout:** `main.tsx` solo tiene `/login` y `/registro`; no hay ruta protegida ni logout. Necesario para probar logueado y para el onboarding de sucursales.
+4. **[SIGUIENTE] `supabase/alta_sucursal.py`:** script tuyo (service_role en TU terminal) que da de alta una sucursal completa invocando `crear_empresa_con_admin` + `clonar_catalogo` (selectivo: empresas, categorías, modo precio). `clonar_catalogo` ya existe en patch_03.
+5. **[SIGUIENTE] Pantalla de edición de catálogo** (alta/edición/borrado lógico `activo=false`, precios, imágenes). La misma pantalla sirve para que la sucursal edite la suya (RLS aísla). El borrado físico NO se usa (FK restrict en venta_detalle).
+6. **[SIGUIENTE] Pantalla de venta (carrito):** el carrito vive en estado de React y se vuelca a `venta`+`venta_detalle` al cobrar. Respeta `empresa.venta_sin_stock` (modo ignorar/advertir/bloquear). El descuento de stock es automático solo si `venta_sin_stock=false`.
+7. **Impresión térmica (ESC/POS):** pendiente.
+8. **Offline (IndexedDB + cola):** Fase 4.
+9. **Gap conocido:** `abono.cuenta_por_cobrar_id` apunta a `venta`; el modelo conceptual define `cuenta_por_cobrar` explícita. Corregir en Fase de Crédito.
+10. **Deuda (fuera MVP):** margen de ganancia configurable (producto/categoría/grupo) vía `empresa.modo_precio` + `margen_pct`; proveedores/compras; devoluciones; limpiar Advisor moviendo `es_de_empresa` a esquema privado.
 
 ## Archivos clave
 - `docs/02-reglas-de-negocio.md` — RN-01..56.
@@ -99,3 +106,24 @@ Requisitos base (instalar si faltan): **Git**, **Node.js 20+** (trae npm). Pytho
 - Las rutas con `\U` en docstrings de Python rompen (unicodeescape); usar `os.path.join`.
 - `maybe_single()` de supabase-py retorna `None` al no hallar fila → usar `.limit(1).execute()` y chequear `res.data`.
 - `.insert().select().limit(1)` no existe en sync builder → usar `.select().execute()` solamente.
+
+## 🔁 REGLA OBLIGATORIA: funciones SECURITY DEFINER y lints 0028/0029 (NO repetir el error)
+> Se repitio 3 veces (patch_01, patch_02, patch_03). Toda funcion SECURITY DEFINER en
+> Supabase queda expuesta via /rest/v1/rpc/ y dispara los lints del Security Advisor
+> 0028 (anon puede ejecutar) y 0029 (authenticated puede ejecutar). Aplicar SIEMPRE este
+> checklist al crear/modificar una funcion definer, en el MISMO parche:
+1. **Clasificar**: ¿es helper de RLS / trigger (NO se llama por API) o ¿es RPC de negocio (SI se llama)?
+2. **Helper/trigger** (ej. trg_alta_usuario, trg_descuenta_stock_venta): agregar
+   `revoke all ... from public; revoke all ... from anon; revoke all ... from authenticated;`
+3. **RPC de negocio** (ej. crear_empresa_con_admin, clonar_catalogo): `revoke ... from public; revoke ... from anon;`
+   (dejar `authenticated`) PERO agregar guarda interna que valide `auth.uid()` (pertenencia o rol admin).
+   NUNCA exponer RPC de negocio sin guarda.
+4. **NUNCA revocar EXECUTE de `es_de_empresa` al rol `authenticated`**: es el helper de TODAS las
+   politicas RLS; revocarlo rompe el acceso (doc PostgreSQL CREATE POLICY: la policy corre con los
+   privilegios del usuario que consulta → "permission denied" en toda la app). Solo revocar de anon.
+5. Usar `search_path = ''` y calificar tablas con `public.`/`auth.`.
+6. Al cerrar el parche, advertir cuantos warnings 0028/0029 quedan y por que son intencionales.
+- Warnings 0028/0029 INTENCIONALES que deben quedar (dismiss en el Advisor): `es_de_empresa` (authenticated),
+  `crear_empresa_con_admin` (authenticated, blindado), `clonar_catalogo` (authenticated, blindado con guarda).
+- Faltan guardas por agregar (deuda): `clonar_catalogo` aun NO valida que auth.uid() pertenezca a
+  p_empresa_origen; hay que agregarla antes de exponerla a usuarios (hoy solo la usa el admin global).
