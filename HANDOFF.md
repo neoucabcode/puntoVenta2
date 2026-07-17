@@ -74,23 +74,17 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 - `web/src/lib/supabase.ts`, `web/src/lib/empresa.ts`, `web/src/lib/auth.ts` — cliente Supabase.
 - `web/src/pages/LoginPage.tsx`, `web/src/pages/RegistroPage.tsx`, `web/src/main.tsx` — UI actual (mínima).
 
-## Setup desde cero en OTRA PC (no asumir herramientas de la PC original)
-Requisitos base (instalar si faltan): **Git**, **Node.js 20+** (trae npm). Python SOLO si se va a re-correr el seed.
-1. `git clone <repo>` y entrar a la carpeta.
-2. Frontend:
-   ```
-   cd web
-   npm install          # instala deps desde package-lock.json
-   ```
-3. Crear `web/.env` (NO está en el repo por seguridad). Contenido:
+## Setup desde cero en OTRA PC (3 pasos, el asistente sabe el resto vía "matrix")
+Requisitos: **Git** + **Node.js 20+**. (Python solo si se re-corre el seed.)
+1. `git clone <repo>` → `cd web` → `npm install` → crear `web/.env` con:
    ```
    VITE_SUPABASE_URL=https://pvopcajqersioqlmccwg.supabase.co
-   VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key del Dashboard: Settings → API Keys>
+   VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key: Dashboard → Settings → API Keys>
    ```
-   La publishable key es segura para el frontend. La secret key NUNCA va acá ni en el repo.
-4. `npm run dev` → levanta Vite (por defecto http://localhost:5173).
-5. La BD Supabase ya está aplicada en la nube (proyecto compartido): esquema + 2 parches + seed. NO hace falta re-aplicar nada salvo que se cree un proyecto Supabase nuevo (en ese caso: correr `schema_fase2.sql`, luego `patch_01`, luego `patch_02`, luego el seed, y desactivar "Confirm email" en el Dashboard).
-6. graphify (`graphify-out/`, plugin `.opencode/plugins/graphify.js`) es OPCIONAL y específico del entorno opencode. Si esas herramientas no existen en la otra PC, el proyecto funciona igual sin ellas.
+   (La secret key NUNCA va acá. La publishable es segura para el frontend.)
+2. `npm run dev` → http://localhost:5173.
+3. La BD ya está aplicada en la nube (esquema + patch_01..04 + seed). Solo re-aplicar SQL si creás un proyecto Supabase nuevo (orden: schema_fase2 → patch_01 → patch_02 → patch_03 → patch_04 → seed; y desactivar "Confirm email").
+> Si usás opencode: decí "matrix" y el AGENTS.md te retoma solo. Si no, leé este HANDOFF.
 
 ## Notas de método
 - graphify CLI: `$py -m graphify extract docs --backend gemini --no-cluster`. El grafo está en `graphify-out/`. OPCIONAL (ver setup).
