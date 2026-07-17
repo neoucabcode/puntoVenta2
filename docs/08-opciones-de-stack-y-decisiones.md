@@ -12,9 +12,9 @@
 |---|---|---|---|
 | Lenguaje de backend | **Node.js (TypeScript)** | Hecho | Un solo lenguaje con el front (React PWA); ecosistema maduro para offline (Service Workers/Workbox) y SQLite local (`better-sqlite3`); migración a Postgres trivial con ORM (Prisma/Drizzle). Baja complejidad operativa (Principio 4). |
 | Framework de frontend | **React PWA (web pura)** | Hecho | Multidispositivo vía navegador, instalable, funciona offline. Sin instalación nativa. |
-| Base de datos principal | **SQLite local** (migrable a PostgreSQL si escala) | Hecho | Cero servidor para un solo negocio; archivo local. Postgres queda como opción de escalabilidad, no requerida al inicio. |
-| Base de datos cliente | **IndexedDB** (vía PWA/Service Worker) | Hecho | Replica offline en el navegador; sincronización con SQLite local. |
-| Estrategia de sincronización | **Offline-first con réplica local** | Hecho | Continuidad ante caídas (RN-28 a RN-30); el cliente opera sin red y replica al servidor SQLite. |
+| Base de datos principal | **Postgres en Supabase (plan free)** desde el inicio | Hecho | Ver `11` §10. Sustituye a SQLite local por decisión del 2026-07-17 (multi-dispositivo, respaldo en nube, $0). |
+| Base de datos cliente | **IndexedDB** (vía PWA/Service Worker) — pendiente Fase 4 | Hecho / Pendiente | En MVP la app es online contra Supabase; offline (IndexedDB + cola) en Fase 4. |
+| Estrategia de sincronización | **Online contra Supabase; offline (IndexedDB + cola) en Fase 4** | Hecho / Pendiente | Ver `11` §10. |
 | Impresión | **Impresora térmica** desde el inicio | Hecho | Tickets en impresora térmica (58/80mm) conectada al mostrador. |
 | Generación de SKU | Automática con formato fijo | Supuesto / Pendiente | Requiere definir formato en Fase 1 avanzada. |
 | Imágenes de producto | Compresión obligatoria a tamaño fijo | Supuesto / Pendiente | Detalle técnico de almacenamiento. |
@@ -25,7 +25,7 @@
 - **Go (backend):** más performante pero añade contexto/despliegue separado; no justifica el costo operativo para PyME local.
 - **Electron/escritorio nativo (Tauri/Qt):** se eligió PWA web pura para evitar instalación nativa y facilitar multi-dispositivo.
 - **Solo frontend local (sin backend):** se requiere servidor SQLite para conciliar caja, inventario y multi-usuario.
-- **PostgreSQL como BD inicial:** descartado para el arranque por complejidad; queda como opción de escalabilidad futura.
+- **PostgreSQL como BD inicial:** DESCARTADO el 2026-07-16; luego REVERTIDO el 2026-07-17 a favor de Supabase Postgres (ver `11` §10). No confundir: el stack final SÍ es Postgres/Supabase, no SQLite.
 
 ## 2. Criterios usados para decidir
 

@@ -1,0 +1,16 @@
+# Locales
+node_modules
+dist
+dist-ssr
+*.local
+.env.*.local
+
+# Supabase — NUNCA commitear (contiene keys). Recrear desde HANDOFF.md
+.env
+.env.local
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.log

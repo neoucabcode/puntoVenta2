@@ -95,3 +95,24 @@
 | Tasa BCV | Automatización por decidir | Pendiente de Fase 1 avanzada | `08` §3 |
 | Protocolo impresión | ESC/POS, librería por elegir | Pendiente de Fase 1 avanzada | `08` §3 |
 | Esquema sincronización/conflictos | Por diseñar | Pendiente de Fase 1 avanzada | `08` §3 |
+
+## 10. Modificación de stack — Supabase como backend en la nube (2026-07-17)
+
+> **Decisión modificatoria de §9.** Surge de la restricción del dueño: la app debe (a) usarse ya en su ferretería, (b) venderse luego a familiares sin costo de funcionamiento, y (c) instalarse sin conocimiento técnico. Además se exigió: datos seguros si la PC se daña, acceso desde otro dispositivo/teléfono, y operación ante caída de luz/internet.
+
+| Ítem | Decisión anterior (`08` §1) | Nueva decisión | Estado | Documento |
+|---|---|---|---|---|
+| BD principal | SQLite local (migrable a Postgres) | **Postgres en Supabase (plan free) desde el inicio** | Hecho | `08` §1, presente |
+| Multi-tenant | No contemplado | **Un proyecto Supabase, datos por `empresa_id` + Row Level Security** | Hecho | presente |
+| Offline | Offline-first con réplica local | **Fase 2 MVP: online contra Supabase; offline (IndexedDB + cola) en Fase 4** | Hecho / Pendiente | `08` §3 |
+| Costo | — | $0 mientras esté en plan free de Supabase | Hecho | presente |
+
+**Justificación:** PWA pura 100% local (IndexedDB) perdía datos si la PC moría y no permitía multi-dispositivo; SQLite local requería servidor que el usuario no puede operar. Supabase free cubre respaldo en nube, acceso multi-dispositivo/teléfono y escala a N ferreterías familiares sin crear un proyecto por cliente. El usuario final solo abre la PWA (icono instalable); el dueño opera el proyecto Supabase.
+
+**Credenciales:** se usó la **Publishable key** (`sb_publishable_...`) en el frontend (equivalente a `anon`, segura de exponer). La **Secret key** (`sb_secret_...`) queda reservada para backend/Edge Functions (Fase 4) y no se commitea.
+
+**Seed de catálogo ejecutado (2026-07-17):** se aplicó `supabase/schema_fase2.sql` y se corrió `supabase/seed_catalogo.py`. Resultado: empresa **FerrehogarMart** creada, **564 productos** insertados (86 sin precio → `precio_usd=0`, editables desde la app), **72 imágenes** `.webp` subidas a bucket `productos/`. El seed es idempotente (re-corrible sin duplicar).
+
+**Rotación de secret keys (2026):** Supabase deprecó las `service_role` legacy. Hoy se usan **Secret keys `sb_secret_...`** que se revocan individualmente sin downtime (Dashboard → Settings → API Keys → pestaña Publishable and secret → ⋯ → Delete/Revoke). Si una secret key se expone en chat/log, ROTALA y crea una nueva; NUNCA se pega en el chat ni la corre el asistente.
+
+**Pendiente de actualizar:** `08-opciones-de-stack-y-decisiones.md` debe reflejar Postgres/Supabase en lugar de SQLite local como BD principal. → YA ACTUALIZADO esta sesión.
