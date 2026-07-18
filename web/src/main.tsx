@@ -6,6 +6,7 @@ import { useAuth } from './lib/auth-context'
 import { LoginPage } from './pages/LoginPage'
 import { RegistroPage } from './pages/RegistroPage'
 import { PosPage } from './pages/PosPage'
+import { CatalogoPage } from './pages/CatalogoPage'
 import { RequireAuth } from './components/RequireAuth'
 import { Layout } from './components/Layout'
 import './index.css'
@@ -23,6 +24,16 @@ function Root() {
           <RequireAuth>
             <Layout>
               <PosPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/catalogo"
+        element={
+          <RequireAuth>
+            <Layout>
+              <CatalogoPage />
             </Layout>
           </RequireAuth>
         }

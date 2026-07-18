@@ -50,17 +50,32 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 8. Chequeo arquitectónico MVP (producto/carrito/registro): el esquema sirve, pero faltaba clonado con remapeo de categorías y descuento de stock condicional (la mayoria de ferreterias NO lleva inventario). Se creó `patch_03_clonar_y_stock.sql`.
 9. Se repitió el error de lints 0028/0029 en patch_03. Se instituyó la REGLA OBLIGATORIA en el HANDOFF (checklist antes de crear funciones definer) y se creó `patch_04_revokes_definer.sql`. Quedaron 3 warnings intencionales.
 
-## Próximos pasos sugeridos (Fase 1 avanzada / MVP) — ORDEN RECOMENDADO
+## Próximos pasos sugeridos — ENFOQUE ACTUAL (desde 2026-07-18)
+> **DECISIÓN DE ENFOQUE:** el usuario definió que Catálogo es la ÚNICA prioridad hasta
+> estar "bien definido". Se PAUSAN: alta_sucursal.py, Pantalla de Venta (carrito),
+> impresión térmica, offline, crédito. No se retoma nada de eso hasta que Catálogo esté
+> consolidado. La app corre en http://localhost:5173/catalogo (dev server en 5173).
+
 1. **[HECHO] Cablear el registro al RPC:** `auth.ts` tiene `crearEmpresaConAdmin()` que llama el RPC; `RegistroPage.tsx` hace `signUp` → RPC. Build OK.
-2. **[HECHO] Parches SQL BD del MVP:** patch_01 (alta RPC + linter), patch_02 (revokes), patch_03 (clonar_catalogo + stock condicional), patch_04 (revokes). Quedan 3 warnings 0029 intencionales.
-3. **[HECHO] App shell + guard de sesión + logout:** `main.tsx` usa `AuthProvider` (escucha `onAuthStateChange`) + `RequireAuth` (redirige a `/login` si no hay sesión) + `Layout` (header con nombre de empresa vía `obtenerMiEmpresa` y botón Salir). Rutas: `/login` (redirige a `/` si ya hay sesión), `/registro`, `/` (POS placeholder protegido). `auth.ts` tiene `logout()`. Build OK.
-4. **[SIGUIENTE] `supabase/alta_sucursal.py`:** script tuyo (service_role en TU terminal) que da de alta una sucursal completa invocando `crear_empresa_con_admin` + `clonar_catalogo` (selectivo: empresas, categorías, modo precio). `clonar_catalogo` ya existe en patch_03.
-5. **[SIGUIENTE] Pantalla de edición de catálogo** (alta/edición/borrado lógico `activo=false`, precios, imágenes). La misma pantalla sirve para que la sucursal edite la suya (RLS aísla). El borrado físico NO se usa (FK restrict en venta_detalle).
-6. **[SIGUIENTE] Pantalla de venta (carrito):** el carrito vive en estado de React y se vuelca a `venta`+`venta_detalle` al cobrar. Respeta `empresa.venta_sin_stock` (modo ignorar/advertir/bloquear). El descuento de stock es automático solo si `venta_sin_stock=false`.
-7. **Impresión térmica (ESC/POS):** pendiente.
-8. **Offline (IndexedDB + cola):** Fase 4.
-9. **Gap conocido:** `abono.cuenta_por_cobrar_id` apunta a `venta`; el modelo conceptual define `cuenta_por_cobrar` explícita. Corregir en Fase de Crédito.
-10. **Deuda (fuera MVP):** margen de ganancia configurable (producto/categoría/grupo) vía `empresa.modo_precio` + `margen_pct`; proveedores/compras; devoluciones; limpiar Advisor moviendo `es_de_empresa` a esquema privado.
+2. **[HECHO] Parches SQL BD del MVP:** patch_01..04 aplicados. patch_05 (storage writes) CREADO pero PENDIENTE de aplicar por el usuario en SQL Editor.
+3. **[HECHO] App shell + guard + logout + nav:** `main.tsx`, `RequireAuth`, `Layout` (nav Venta/Catálogo), rutas `/login`,`/registro`,`/`,`/catalogo`. Build OK.
+4. **[HECHO] Pantalla de catálogo (v1 funcional):** `CatalogoPage.tsx` + `ProductoForm.tsx` + `lib/productos.ts`. Lista/busca/filtra/crea/edita/soft-delete, alta de categorías inline, upload de imagen a `productos/${empresa_id}/`. Verificado en vivo: el usuario admin (creado por Dashboard, NO por SQL) ve los 564 productos de FerrehogarMart.
+5. **[EN CURSO] Consolidar Catálogo (prioridad única):**
+   - Revisión profunda de `lib/productos.ts`, `CatalogoPage.tsx`, `ProductoForm.tsx` para bugs/gaps.
+   - Aplicar `patch_05_storage_writes.sql` (desbloquea upload real de imágenes).
+   - Definir bien el modelo de la pantalla: ¿precio solo USD o también BS vía tasa? ¿edición masiva? ¿códigos de barra? ¿multimedia?
+   - UX: paginación/scroll infinito (hoy `.limit(500)` hardcodeado), feedback de guardado, estados de carga por fila.
+   - Validaciones: SKU/código único por empresa, precio >= 0, etc.
+ - **[HECHO 2026-07-18, sesión rediseño UI] Mejoras de catálogo aplicadas:**
+   - Buscador progresivo por palabra (prefijo de palabra primero, cae a substring) en `lib/productos.ts`.
+   - Toolbar sticky; SKU en primera columna.
+   - SKU y código de barras únicos por empresa (índice parcial en `patch_06_sku_unico.sql` extendido con `idx_producto_empresa_cb_unico`). Validación en `ProductoForm.tsx` + catch de duplicado server.
+   - Desactivar/reactivar actualiza solo la fila (no recarga toda la lista ni pierde scroll).
+   - **Rediseño UI**: layout dos columnas (sidebar de categorías sticky + main) con **toggle grid/lista** (cards estilo POS + tabla). Referencias: Square/Lightspeed/Odoo/Toast usan cards + sidebar de filtros; Odoo toggle grid/list. `CatalogoPage.tsx` + `index.css`.
+   - ⚠️ **PENDIENTE ANTES DE CARRITO**: revisar y aplicar este mismo lenguaje visual (cards, sidebar, toggle, badges, sticky) a las demás pantallas (Login/Registro, Venta, etc.) para consistencia. El catálogo quedó como referencia de estilo.
+6. **[PAUSADO] `supabase/alta_sucursal.py`:** clonado de catálogo a sucursales.
+7. **[PAUSADO] Pantalla de venta (carrito).**
+8. **[PAUSADO] Impresión térmica / Offline / Crédito.**
 
 ## Archivos clave
 - `docs/02-reglas-de-negocio.md` — RN-01..56.
@@ -100,6 +115,9 @@ Requisitos: **Git** + **Node.js 20+**. (Python solo si se re-corre el seed.)
 - Las rutas con `\U` en docstrings de Python rompen (unicodeescape); usar `os.path.join`.
 - `maybe_single()` de supabase-py retorna `None` al no hallar fila → usar `.limit(1).execute()` y chequear `res.data`.
 - `.insert().select().limit(1)` no existe en sync builder → usar `.select().execute()` solamente.
+- **NUNCA crear usuario admin insertando directo en `auth.users` por SQL.** Queda "invisible" para GoTrue: el login da 400 `invalid_credentials` aunque `encrypted_password`, `aud='authenticated'`, `email_confirmed_at` y `pass_ok` sean correctos (el Auth Log muestra `auth_user: null`). Crear SIEMPRE desde Dashboard → Authentication → Users → Add user (Auto Confirm) y luego insertar la fila en `public.usuario` ligando `empresa_id`. (Verificado 2026-07-18: se perdió ~1h en esto.)
+- **Formato de API keys cambió:** ya NO son JWT `eyJ...`; ahora son `sb_publishable_<22chars>_<8chars-checksum>` y `sb_secret_<22>_<8>`. La publishable es segura para el frontend (`VITE_SUPABASE_PUBLISHABLE_KEY`).
+- En `auth.users` de versiones nuevas **NO existe la columna `is_disabled`**; el baneo va en `raw_app_meta_data`. Al insertar por SQL hay que setear `aud='authenticated'`.
 
 ## 🔁 REGLA OBLIGATORIA: funciones SECURITY DEFINER y lints 0028/0029 (NO repetir el error)
 > Se repitio 3 veces (patch_01, patch_02, patch_03). Toda funcion SECURITY DEFINER en
