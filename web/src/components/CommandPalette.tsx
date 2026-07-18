@@ -55,7 +55,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             navItems.map((n) => (
               <li key={n.label}>
                 <button onClick={() => ir(n.to)}>
-                  <span className="palette-ico">→</span> {n.label}
+                  <span className="palette-ico material-symbols-outlined">arrow_forward</span> {n.label}
                 </button>
               </li>
             ))
@@ -65,7 +65,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             resultados.map((p) => (
               <li key={p.id}>
                 <button onClick={() => ir('/catalogo')}>
-                  <span className="palette-ico">▤</span>
+                  <span className="palette-ico material-symbols-outlined">inventory_2</span>
                   <span className="palette-nombre">{p.nombre}</span>
                   <code className="palette-sku">{p.sku ?? '—'}</code>
                 </button>

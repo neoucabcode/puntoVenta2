@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { obtenerMiEmpresaId } from './empresa'
 
 export type Producto = {
   id: string
@@ -53,42 +54,44 @@ export async function listarProductos(opts?: {
   pageSize?: number
 }): Promise<ListarResult> {
   const limit = opts?.pageSize ?? PAGE_SIZE
-  const from = opts?.offset ?? 0
-  const to = from + limit - 1
-  let q = supabase
-    .from('producto')
-    .select('*, categoria:categoria_id(id,nombre)', { count: 'exact' })
-    .order('nombre', { ascending: true })
-    .range(from, to)
-  if (opts?.soloActivos) q = q.eq('activo', true)
-  if (opts?.categoriaId) q = q.eq('categoria_id', opts.categoriaId)
-  if (opts?.search) {
-    const s = opts.search.trim()
-    if (s) {
-      const tokens = s.split(/\s+/).filter(Boolean)
-      const condiciones: string[] = []
-      for (const t of tokens) {
-        const like = `%${t}%`
-        const prefijo = `${t}%`
-        // Prefijo de palabra primero (la palabra empieza con el token), luego
-        // substring (el token aparece en cualquier parte de nombre/sku/codigo).
-        condiciones.push(
-          `nombre.ilike.${prefijo}`,
-          `sku.ilike.${prefijo}`,
-          `codigo_barras.ilike.${prefijo}`,
-          `nombre.ilike.${like}`,
-          `sku.ilike.${like}`,
-          `codigo_barras.ilike.${like}`
-        )
-      }
-      q = q.or(condiciones.join(','))
-    }
-  }
-  const { data, error, count } = await q
+  const offset = opts?.offset ?? 0
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) return { items: [], hasMore: false }
+
+  // RPC buscar_productos: rankea y pagina en el SERVIDOR (escala a miles de
+  // productos sin traer todo al cliente). Hereda RLS => aislado por tenant.
+  const { data, error } = await supabase.rpc('buscar_productos', {
+    p_empresa_id: empresaId,
+    p_search: opts?.search?.trim() ?? '',
+    p_categoria_id: opts?.categoriaId ?? null,
+    p_solo_activos: opts?.soloActivos ?? true,
+    p_limit: limit,
+    p_offset: offset,
+  })
   if (error) throw error
-  const items = (data ?? []) as ProductoJoin[]
-  const total = count ?? 0
-  const hasMore = from + items.length < total
+
+  const items = ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
+    const cat = r.categoria as { id: string; nombre: string } | null
+    return {
+      id: r.id as string,
+      codigo_barras: (r.codigo_barras as string) ?? null,
+      sku: (r.sku as string) ?? null,
+      nombre: r.nombre as string,
+      categoria_id: (r.categoria_id as string) ?? null,
+      unidad: (r.unidad as string) ?? 'unidad',
+      costo_usd: Number(r.costo_usd ?? 0),
+      precio_usd: Number(r.precio_usd ?? 0),
+      imagen_url: (r.imagen_url as string) ?? null,
+      stock_actual: Number(r.stock_actual ?? 0),
+      stock_minimo: Number(r.stock_minimo ?? 0),
+      activo: Boolean(r.activo),
+      categoria: cat ? { id: cat.id, nombre: cat.nombre } : null,
+    } as ProductoJoin
+  })
+
+  // El RPC no devuelve count total; estimamos hasMore por si volvio menos que
+  // el limite. Para scroll infinito esto es suficiente y correcto.
+  const hasMore = items.length >= limit
   return { items, hasMore }
 }
 
@@ -188,16 +191,6 @@ export async function subirImagenProducto(
   if (error) throw error
   const { data } = supabase.storage.from('productos').getPublicUrl(path)
   return data.publicUrl
-}
-
-export async function obtenerMiEmpresaId(): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('usuario')
-    .select('empresa_id')
-    .eq('id', (await supabase.auth.getUser()).data.user?.id ?? '')
-    .single()
-  if (error) return null
-  return (data?.empresa_id as string) ?? null
 }
 
 export async function verificarSkuDuplicado(

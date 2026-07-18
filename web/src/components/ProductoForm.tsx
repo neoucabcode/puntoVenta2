@@ -3,13 +3,13 @@ import {
   crearProducto,
   actualizarProducto,
   subirImagenProducto,
-  obtenerMiEmpresaId,
   verificarSkuDuplicado,
   verificarCodigoDuplicado,
   type Categoria,
   type Producto,
   type ProductoInput,
 } from '../lib/productos'
+import { obtenerMiEmpresaId } from '../lib/empresa'
 
 type Props = {
   producto: Producto | null

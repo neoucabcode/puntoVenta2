@@ -10,6 +10,7 @@ import {
   type Categoria,
 } from '../lib/productos'
 import { ProductoForm } from '../components/ProductoForm'
+import { DataTable } from '../components/DataTable'
 
 export function CatalogoPage() {
   const [productos, setProductos] = useState<ProductoJoin[]>([])
@@ -25,8 +26,11 @@ export function CatalogoPage() {
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
   const sentinelaRef = useRef<HTMLDivElement | null>(null)
+  const gridScrollRef = useRef<HTMLDivElement | null>(null)
+  const listaScrollRef = useRef<HTMLDivElement | null>(null)
   const offsetRef = useRef(0)
   const cargandoRef = useRef(false)
+  const [vista, setVista] = useState<'grid' | 'lista'>('grid')
 
   const cargarPagina = useCallback(
     async (reset: boolean) => {
@@ -92,11 +96,11 @@ export function CatalogoPage() {
           cargarPagina(false)
         }
       },
-      { rootMargin: '200px' }
+      { root: vista === 'grid' ? gridScrollRef.current : listaScrollRef.current, rootMargin: '200px' }
     )
     obs.observe(node)
     return () => obs.disconnect()
-  }, [hasMore, cargarPagina])
+  }, [hasMore, cargarPagina, vista])
 
   async function onDesactivar(p: ProductoJoin) {
     if (!confirm(`¿Desactivar "${p.nombre}"? Queda en el historial pero no se venderá más.`)) return
@@ -133,61 +137,40 @@ export function CatalogoPage() {
   }
 
   const edicion = editId ? productos.find((p) => p.id === editId) ?? null : null
-  const [vista, setVista] = useState<'grid' | 'lista'>('grid')
+
+  function stockEstado(p: ProductoJoin): 'ok' | 'warn' | 'off' {
+    if (!p.activo) return 'off'
+    if (p.stock_actual <= 0) return 'off'
+    if (p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo) return 'warn'
+    return 'ok'
+  }
+  const stockLabel: Record<'ok' | 'warn' | 'off', string> = {
+    ok: 'En stock',
+    warn: 'Stock bajo',
+    off: 'Agotado',
+  }
 
   return (
     <div className="catalogo">
       <header className="catalogo-toolbar">
-        <input
-          className="buscador"
-          placeholder="Buscar por nombre, SKU o código"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={soloActivos}
-            onChange={(e) => setSoloActivos(e.target.checked)}
-          />
-          Solo activos
-        </label>
-        <div className="toggle-vista" role="group" aria-label="Vista">
-          <button
-            className={vista === 'grid' ? 'active' : ''}
-            onClick={() => setVista('grid')}
-            aria-pressed={vista === 'grid'}
-            title="Cuadrícula"
-          >▦</button>
-          <button
-            className={vista === 'lista' ? 'active' : ''}
-            onClick={() => setVista('lista')}
-            aria-pressed={vista === 'lista'}
-            title="Lista"
-          >≡</button>
+        <div className="catalogo-head">
+          <h2 className="catalogo-title">Catálogo de productos</h2>
+          <p className="catalogo-sub">
+            {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+          </p>
         </div>
-        <button className="primary" onClick={() => setShowNuevo(true)}>+ Nuevo producto</button>
-      </header>
-
-      <div className="catalogo-body">
-        <aside className="catalogo-sidebar">
-          <h3>Categorías</h3>
-          <ul>
-            <li>
-              <button
-                className={categoriaFiltro === '' ? 'active' : ''}
-                onClick={() => setCategoriaFiltro('')}
-              >Todas</button>
-            </li>
+        <div className="catalogo-filtros">
+          <select
+            className="filtro-cat"
+            value={categoriaFiltro}
+            onChange={(e) => setCategoriaFiltro(e.target.value)}
+            aria-label="Filtrar por categoría"
+          >
+            <option value="">Todas las categorías</option>
             {categorias.map((c) => (
-              <li key={c.id}>
-                <button
-                  className={categoriaFiltro === c.id ? 'active' : ''}
-                  onClick={() => setCategoriaFiltro(c.id)}
-                >{c.nombre}</button>
-              </li>
+              <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
-          </ul>
+          </select>
           <details className="nueva-cat">
             <summary>+ Nueva categoría</summary>
             <div className="row">
@@ -199,8 +182,43 @@ export function CatalogoPage() {
               <button onClick={onCrearCategoria}>Crear</button>
             </div>
           </details>
-        </aside>
+        </div>
+        <div className="catalogo-head-actions">
+          <input
+            className="buscador"
+            placeholder="Buscar por nombre, SKU o código"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={soloActivos}
+              onChange={(e) => setSoloActivos(e.target.checked)}
+            />
+            Solo activos
+          </label>
+          <div className="toggle-vista" role="group" aria-label="Vista">
+            <button
+              className={vista === 'grid' ? 'active' : ''}
+              onClick={() => setVista('grid')}
+              aria-pressed={vista === 'grid'}
+              title="Cuadrícula"
+            ><span className="material-symbols-outlined">grid_view</span></button>
+            <button
+              className={vista === 'lista' ? 'active' : ''}
+              onClick={() => setVista('lista')}
+              aria-pressed={vista === 'lista'}
+              title="Lista"
+            ><span className="material-symbols-outlined">list</span></button>
+          </div>
+          <button className="primary" onClick={() => setShowNuevo(true)}>
+            <span className="material-symbols-outlined">add</span> Nuevo producto
+          </button>
+        </div>
+      </header>
 
+      <div className="catalogo-body">
         <main className="catalogo-main">
           {error && <p className="error">{error}</p>}
 
@@ -209,111 +227,118 @@ export function CatalogoPage() {
           ) : productos.length === 0 ? (
             <p>No hay productos para los filtros actuales</p>
           ) : vista === 'grid' ? (
-            <div className="productos-grid">
-              {productos.map((p) => (
-                <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
-                  <div className="card-img">
-                    {p.imagen_url ? (
-                      <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
-                    ) : (
-                      <span className="thumb-empty">—</span>
-                    )}
-                    {!p.activo && <span className="ribbon off">inactivo</span>}
-                  </div>
-                  <div className="card-info">
-                    <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
-                    <div className="card-nombre">{p.nombre}</div>
-                    <div className="card-meta">
-                      <span>{p.categoria?.nombre ?? '—'}</span>
-                    </div>
-                    <div className="card-precio">
-                      {p.precio_usd > 0 ? (
-                        `$${p.precio_usd.toFixed(2)}`
-                      ) : (
-                        <span className="badge warn">sin precio</span>
-                      )}
-                    </div>
-                    <div className="card-stock">
-                      Stock: {p.stock_actual}
-                      {p.stock_actual <= p.stock_minimo && p.stock_minimo > 0 && (
-                        <span className="badge warn">mín</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="card-actions">
-                    <button onClick={() => setEditId(p.id)}>Editar</button>
-                    {p.activo ? (
-                      <button onClick={() => onDesactivar(p)}>Desactivar</button>
-                    ) : (
-                      <button onClick={() => onReactivar(p)}>Reactivar</button>
-                    )}
-                  </div>
-                </article>
-              ))}
+            <div className="productos-grid-scroll" ref={gridScrollRef}>
+              <div className="productos-grid">
+                {productos.map((p) => {
+                  const st = stockEstado(p)
+                  return (
+                    <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
+                      <div className="card-img">
+                        {p.imagen_url ? (
+                          <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
+                        ) : (
+                          <span className="thumb-empty material-symbols-outlined">image</span>
+                        )}
+                        <span className={`ribbon ${st}`}>{stockLabel[st]}</span>
+                      </div>
+                      <div className="card-info">
+                        <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
+                        <div className="card-nombre">{p.nombre}</div>
+                        <div className="card-meta">
+                          <span>{p.categoria?.nombre ?? '—'}</span>
+                        </div>
+                        <div className="card-footer">
+                          <div className="card-precio">
+                            {p.precio_usd > 0 ? (
+                              `$${p.precio_usd.toFixed(2)}`
+                            ) : (
+                              <span className="badge warn">sin precio</span>
+                            )}
+                          </div>
+                          <div className={`card-stock ${st === 'off' ? 'off' : st === 'warn' ? 'warn' : ''}`}>
+                            {p.stock_actual} uds
+                          </div>
+                        </div>
+                      </div>
+                      <div className="card-actions">
+                        <button onClick={() => setEditId(p.id)}>
+                          <span className="material-symbols-outlined">edit</span> Editar
+                        </button>
+                        {p.activo ? (
+                          <button onClick={() => onDesactivar(p)}>
+                            <span className="material-symbols-outlined">delete</span> Desactivar
+                          </button>
+                        ) : (
+                          <button onClick={() => onReactivar(p)}>
+                            <span className="material-symbols-outlined">check_circle</span> Reactivar
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })}
+                <div ref={sentinelaRef} className="sentinela" />
+              </div>
             </div>
           ) : (
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th></th>
-                  <th>Nombre</th>
-                  <th>Categoría</th>
-                  <th className="num">Precio USD</th>
-                  <th className="num">Stock</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {productos.map((p) => (
-                  <tr key={p.id} className={p.activo ? '' : 'inactivo'}>
-                    <td><code>{p.sku ?? '—'}</code></td>
-                    <td className="thumb">
-                      {p.imagen_url ? (
-                        <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
-                      ) : (
-                        <span className="thumb-empty">—</span>
-                      )}
-                    </td>
-                    <td>{p.nombre}</td>
-                    <td>{p.categoria?.nombre ?? '—'}</td>
-                    <td className="num">
-                      {p.precio_usd > 0 ? (
-                        `$${p.precio_usd.toFixed(2)}`
-                      ) : (
-                        <span className="badge warn">sin precio</span>
-                      )}
-                    </td>
-                    <td className="num">
-                      {p.stock_actual}
-                      {p.stock_actual <= p.stock_minimo && p.stock_minimo > 0 && (
-                        <span className="badge warn">mín</span>
-                      )}
-                    </td>
-                    <td>
+            <DataTable
+              columnas={[
+                { key: 'sku', titulo: 'SKU', render: (p: ProductoJoin) => <code>{p.sku ?? '—'}</code> },
+                {
+                  key: 'img', titulo: '', hideHeader: true, className: 'dt-thumb',
+                  render: (p: ProductoJoin) =>
+                    p.imagen_url ? (
+                      <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
+                    ) : (
+                      <span className="dt-thumb-empty material-symbols-outlined">image</span>
+                    ),
+                },
+                { key: 'nombre', titulo: 'Nombre', render: (p: ProductoJoin) => p.nombre },
+                { key: 'categoria', titulo: 'Categoría', render: (p: ProductoJoin) => p.categoria?.nombre ?? '—' },
+                {
+                  key: 'precio', titulo: 'Precio USD', align: 'right',
+                  render: (p: ProductoJoin) =>
+                    p.precio_usd > 0 ? (
+                      `$${p.precio_usd.toFixed(2)}`
+                    ) : (
+                      <span className="badge warn">sin precio</span>
+                    ),
+                },
+                { key: 'stock', titulo: 'Stock', align: 'right', render: (p: ProductoJoin) => p.stock_actual },
+                {
+                  key: 'estado', titulo: 'Estado',
+                  render: (p: ProductoJoin) => <span className={`badge ${stockEstado(p)}`}>{stockLabel[stockEstado(p)]}</span>,
+                },
+                {
+                  key: 'acciones', titulo: '', hideHeader: true, className: 'dt-actions',
+                  render: (p: ProductoJoin) => (
+                    <>
+                      <button onClick={() => setEditId(p.id)} title="Editar">
+                        <span className="material-symbols-outlined">edit</span>
+                      </button>
                       {p.activo ? (
-                        <span className="badge ok">activo</span>
+                        <button onClick={() => onDesactivar(p)} title="Desactivar">
+                          <span className="material-symbols-outlined">delete</span>
+                        </button>
                       ) : (
-                        <span className="badge off">inactivo</span>
+                        <button onClick={() => onReactivar(p)} title="Reactivar">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </button>
                       )}
-                    </td>
-                    <td className="actions">
-                      <button onClick={() => setEditId(p.id)}>Editar</button>
-                      {p.activo ? (
-                        <button onClick={() => onDesactivar(p)}>Desactivar</button>
-                      ) : (
-                        <button onClick={() => onReactivar(p)}>Reactivar</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </>
+                  ),
+                },
+              ]}
+              filas={productos}
+              rowKey={(p) => p.id}
+              isInactivo={(p) => !p.activo}
+              empty="No hay productos para los filtros actuales"
+              scrollRef={listaScrollRef}
+              after={<div ref={sentinelaRef} className="sentinela" />}
+            />
           )}
 
           {loadingMore && <p className="loading-more">Cargando más…</p>}
-          <div ref={sentinelaRef} className="sentinela" />
         </main>
       </div>
 

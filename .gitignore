@@ -23,3 +23,9 @@ build/
 
 #Logs
 *.log
+
+# Tooling / local state (not source)
+.atl/
+.opencode/
+imagenesNuevas/
+web/tsconfig.tsbuildinfo
