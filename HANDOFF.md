@@ -239,3 +239,40 @@ Requisitos: **Git** + **Node.js 20+**. (Python solo si se re-corre el seed.)
   `crear_empresa_con_admin` (authenticated, blindado), `clonar_catalogo` (authenticated, blindado con guarda).
 - Faltan guardas por agregar (deuda): `clonar_catalogo` aun NO valida que auth.uid() pertenezca a
   p_empresa_origen; hay que agregarla antes de exponerla a usuarios (hoy solo la usa el admin global).
+
+---
+
+## 🟢 ESTADO DE SESIÓN 2026-07-19 (tarde) — orchestrator + delegación
+
+**Rol:** El asistente actúa como ORCHESTRATOR. NO implementa a mano salvo casos donde el sub-agent
+no puede resolver (ej. requiere credenciales del usuario o Inspeccionar DOM del navegador del usuario).
+TODO trabajo de implementación/código se DELEGA a sub-agents (`task` tool → `general`, `sdd-*`, `review-*`,
+`jd-*`). Al delegar, se les pasa: contexto, archivos relevantes, regla de "diagnosticar causa raíz no tirar
+flechas", y **herramientas externas** (skill de la librería que toque + docu oficial actualizada vía context7).
+Ej.: sub-agent de Supabase recibe skill + docu oficial de Supabase SQL/RPC; sub-agent de UI recibe
+skill de frontend-design / ui-ux-pro-max + docu oficial de React/Vite/CSS que aplique.
+
+**Bugs de UI en curso (pendientes de sub-agent en próxima sesión):**
+- **Bug 1 — Vista lista (DataTable):** el nombre se superpone a la imagen (la tapa), no al lado. NO es el
+  `zoom` de `<html>` (ya se descartó). Estructura: `CatalogoPage.tsx` usa `<DataTable>` con columna `img`
+  (className `dt-thumb`) y `nombre` (className `nombre`). `web/src/index.css` tiene `.dt-table` con
+  `table-layout: fixed`. El orchestrator intentó 4 fixes a ciegas y empeoró; revertido a estado donde la
+  imagen se ve pero sin separación uniforme. **Requiere sub-agent frontend con diagnóstico real** (leer
+  DataTable.tsx + CatalogoPage.tsx + index.css y ver el render, o pedir al usuario el HTML de una fila <tr>).
+- **Bug 2 — Zoom de app:** botón en `Layout.tsx` (topbar-reset-zoom) llama `resetZoom` (solo vuelve a 1).
+  `main.tsx:24` aplica `document.documentElement.style.zoom` (FRÁGIL: rompe aspect-ratio en Chromium y
+  position:fixed/modales). Avance parcial commiteado en `ui-store.ts`: se agregaron `zoomIn`/`zoomOut`,
+  `ZOOM_MIN/MAX/STEP` y `setZoom` con clamp. **Pendiente:** cablear `zoomIn`/`zoomOut` en el topbar (grupo
+  [−] [%] [+]) y reemplazar `zoom` de `<html>` por `transform: scale()` en un wrapper del contenido.
+- **Bug 3 — Decisiones de catálogo:** precio BS/tasa, edición masiva, orden/filtros, stock. **Alcance de
+  PRÓXIMA sesión** (no es bug de esta).
+
+**Últimos commits (esta sesión):**
+- `b69412b` wip(ui): zoom store + intentos fix tabla lista (en curso, pendiente sub-agent)
+- `b0ae6d2` docs: fuente de verdad = orchestrator + CodeGraph + git pull --rebase + push a origin/master
+- `d181693` (rebase sobre 9975660) fix deuda técnica (CommandPalette, empresa.ts, auth.ts, productos.ts)
+
+**Próxima sesión (orden sugerido):**
+1. Delegar a sub-agent frontend (con skill ui-ux-pro-max + docu React/CSS) el Bug 1 y Bug 2 en un solo paso.
+2. Commit/push de los fixes de UI.
+3. (Otra sesión) Profundizar decisiones de catálogo (Bug 3).

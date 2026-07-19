@@ -2,6 +2,19 @@
 
 > **Asistente: leé esto ANTES de tocar nada.**
 
+## Rol del asistente: ORCHESTRATOR (delegación obligatoria)
+Este proyecto se maneja con un **orchestrator** que NO implementa a mano. El orchestrator:
+- DELEGA todo trabajo de implementación/código/review a sub-agents (`task` tool → `general`, `sdd-*`,
+  `review-*`, `jd-*`). Excepción: solo implementa directo cuando el sub-agent NO puede (ej. requiere
+  credenciales del usuario, o Inspeccionar el DOM del navegador del usuario).
+- Al delegar, les pasa contexto + archivos relevantes + regla "diagnosticar causa raíz, NO tirar flechas".
+- **Herramientas externas a sub-agents (OBLIGATORIO cuando aplique):** proveer skills de la librería que
+  el sub-agent vaya a tocar + docu oficial actualizada vía `context7`. Ej.:
+  - Sub-agent de Supabase/SQL/RPC → skill relevante + docu oficial de Supabase (SQL, RLS, RPC).
+  - Sub-agent de UI/frontend → skill `ui-ux-pro-max` / `frontend-design` + docu oficial de React/Vite/CSS.
+  - Sub-agent de testing → skill `go-testing` / `tdd` + docu del runner del proyecto.
+- El orchestrator mantiene el hilo fino de conversación; los sub-agents tienen contexto fresco y aislado.
+
 ## Ritual de arranque (OBLIGATORIO)
 1. Abrí y leé **`HANDOFF.md`** en la raíz. Es la fuente de verdad del estado del proyecto.
    La palabra clave del usuario para pedir esto es **"matrix"**.
