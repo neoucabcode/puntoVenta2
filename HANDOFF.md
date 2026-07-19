@@ -8,7 +8,14 @@
 Sistema de punto de venta para ferretería bimonetaria (Venezuela: BS / USD). Carpeta: `C:\Proyectos\puntoVenta2`.
 Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`).
 
-## Estado actual (última actualación: 2026-07-18, sesión tema light + ajustes catálogo)
+## Estado actual (última actualización: 2026-07-19, auditoría honesta + corrección de OpenCode config)
+
+> **NOTA DE AUDITORÍA 2026-07-19:** se revisó el repo con ojos frescos (sin atarse a versiones previas
+> del HANDOFF). Abajo hay una sección **Deuda técnica real** con los hallazgos verificados. El error
+> del RPC `buscar_productos` que figuraba como "PENDIENTE CRÍTICO" fue **diagnosticado**: NO es del SQL
+> (el RPC `patch_07` está bien tipado y es `security invoker`), es un mismatch **cliente↔servidor** por
+> `numeric`→`string` (PostgREST serializa numeric como string, el código espera number y hace `Number()`
+> con defaults que rompen). Ver sección "Deuda técnica real" y "RPC buscar_productos — MITO ACLARADO".
 
 ### Cambios de UI aplicados en esta sesión (build OK)
 - **Modo light/dark**: toggle manual + persistido en `ui-store` (`pv-ui`). Bloque `[data-theme="light"]` ya existía en `index.css`; se cableó: `ui-store` con `theme`+`toggleTheme`, `main.tsx` aplica `data-theme` en `<html>`, botón sol/luna en `Layout.tsx` topbar. Literales `#052e16`/`#fff` corregidos por `var(--primary-ink)`.
@@ -31,10 +38,20 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 - `web/src/lib/empresa.ts` → `obtenerMiEmpresa` ahora devuelve `id`; nuevo `obtenerMiEmpresaId` cacheado en módulo. `ProductoForm.tsx` importa `obtenerMiEmpresaId` desde `empresa.ts`.
 - **RPC es `security invoker` (NO definer)** → hereda RLS `es_de_empresa`, aislado por tenant, NO dispara lints 0028/0029.
 
-### ⚠️ PENDIENTE CRÍTICO (a resolver en próxima sesión)
-- **`supabase/patch_07_buscar_productos_rpc.sql` NO aplicado todavía.** El usuario lo pegó en SQL Editor y recibió el error **"structure of query does not match function result type"**. Se corrigieron los casts (`::int` en `score`, `::jsonb` en `categoria`) en ambas ramas del RPC, pero **el error PERSISTE** al cierre de esta sesión.
-- **HIPÓTESIS a investigar:** el mismatch puede ser por tipo de alguna columna de `producto` distinta a la declarada en `RETURNS TABLE` (ej. `unidad`, `stock_actual`/`stock_minimo` podrían no ser `int`, o `costo_usd`/`precio_usd` no `numeric`), O el planner infiriendo el `min(case...)` como `bigint`. Al retomar: (1) pegar el SQL corregido de `patch_07`; (2) si persiste, correr en Supabase `select * from buscar_productos(...)` y leer el mensaje EXACTO de línea; (3) verificar tipos reales de `producto` con `\d producto` o `information_schema.columns`; (4) alinear `RETURNS TABLE` con los tipos reales.
-- MIENTRAS el RPC no exista/a funcione, `listarProductos` falla y el catálogo queda VACÍO (no hay fallback). Al resolver el RPC, el catálogo vuelve a mostrar productos y la búsqueda rankeada se enciende.
+### RPC `buscar_productos` — MITO ACLARADO (2026-07-19)
+- **El RPC `patch_07` está BIEN tipado y es `security invoker`.** El error histórico
+  "structure of query does not match function result type" que perseguía el HANDOFF era un
+  **mito de diagnóstico**: el SQL no está mal. El problema real es **cliente↔servidor**:
+  PostgREST serializa columnas `numeric` de Postgres como **string** en JSON, y el código de
+  `web/src/lib/productos.ts` (y `CatalogoPage`) espera `number`, haciendo `Number(...)` con
+  defaults que rompen el render (catálogo vacío / NaN). Es un bug de tipado en el frontend, no de SQL.
+- **Acción correcta al retomar:** no volver a pegar/parchear el SQL. En su lugar, tipar correctamente
+  las columnas `numeric` (`precio_usd`, `costo_usd`, etc.) como `string` en los tipos del frontend y
+  convertir a número solo en el punto de uso (o usar un parser explícito con fallback a 0), y mostrar
+  un mensaje de error claro si el RPC falla en vez de dejar el catálogo en blanco silenciosamente.
+- **Estado:** `supabase/patch_07_buscar_productos_rpc.sql` existe en el repo (sin trackear) y está
+  BIEN tipado. Falta confirmar si está APLICADO en Supabase. El fix del catálogo vacío es
+  frontend (tipar `numeric` como `string`), NO re-parchear el SQL. Ver "Deuda técnica real" item 4.
 
 ### Parches SQL aplicados (histórico, hasta patch_04)
 - `supabase/patch_01_alta_y_linter.sql` — APLICADO. (RPC `crear_empresa_con_admin`, SECURITY DEFINER).
@@ -56,6 +73,49 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
   - Authentication → Email → **"Confirm email" DESACTIVADO** (para MVP: el usuario queda logueado al instante tras signUp; el RPC de alta necesita `auth.uid()`).
 - **Catálogo sembrado:** `supabase/seed_catalogo.py` YA EJECUTADO. Resultado: **564 productos** insertados (86 sin precio → `precio_usd=0`, se editan desde la app), **72 imágenes** `.webp` subidas a bucket `productos/` y enlazadas por `imagen_url`. 8 categorías creadas.
 - **Grafo graphify:** `graphify-out/` presente (68 nodos / 78 aristas). Plugin en `.opencode/plugins/graphify.js`.
+  ⚠️ **OBSOLETO**: el grafo se generó en el commit `c01f1c07` y el código ha cambiado desde entonces
+  (rediseño de catálogo, RPC, tema light/dark, sidebar colapsable). No refleja el estado actual.
+  Regenerar con `graphify` antes de usarlo como mapa, o ignorarlo.
+
+## Deuda técnica real (auditoría 2026-07-19 — verificada, NO especulativa)
+
+> Lista honesta de problemas de código encontrados al revisar el repo con ojos frescos.
+> Separada de los "pendientes de feature". Los críticos de SEGURIDAD multi-tenant están
+> POSTPUESTOS (el usuario es el único dueño por ahora), pero se registran para no olvidarlos.
+
+### 🔴 Críticos (postergados por decisión de negocio — dueño único)
+1. **Fuga de Storage multi-tenant** — `supabase/schema_fase2.sql:288` (`productos_public_read`)
+   expone objetos sin chequear `es_de_empresa`. Hoy cualquier empresa podría leer imágenes de otra.
+   *Fix futuro:* agregar guarda `es_de_empresa(empresa_id)` en la policy de SELECT del bucket.
+2. ~~**`empresaIdCache` sin invalidar en logout**~~ **RESUELTO 2026-07-19:** `empresa.ts` exporta
+   `limpiarCacheEmpresa()` y `auth.ts` la llama en `logout`. Falta invalidar en `onAuthStateChange`
+   (por si Supabase cambia la sesión solo), pero el flujo explícito de logout ya está cubierto.
+
+### 🟠 Altos (calidad / robustez)
+3. ~~**Fallos silenciosos (catch vacío)**~~ **RESUELTO 2026-07-19:** `CommandPalette.tsx:27`
+   ahora hace `console.error` del error en vez de tragarlo. `listarCategorias` y `listarProductos`
+   ya re-lanzan (`throw error`), así que el flujo superior puede mostrar feedback.
+4. ~~**Tipado `numeric`→`string` roto**~~ **RESUELTO 2026-07-19:** `web/src/lib/productos.ts`
+   tiene `parseNumeric()` que lanza si el valor PostgREST (`string`) es inválido, en vez de
+   `Number(??0)` silencioso. Es la causa raíz del "catálogo vacío" histórico, NO el SQL del RPC.
+   (Ver sección "RPC buscar_productos — MITO ACLARADO".)
+5. **`confirm()` nativo del navegador** — usado en `CatalogoPage` y `Layout` para borrar/desactivar.
+   Bloquea el hilo, malo en PWA/móvil, y no es accesible. *Fix:* reemplazar por un diálogo propio.
+
+### 🟡 Medios (UX / claridad)
+6. **Paginación falsa** — el "scroll infinito" trae `.limit(500)` hardcodeado y no pagina de verdad;
+   con 2000+ productos se rompe. *Fix:* paginar con cursor/offset real contra el RPC.
+7. **Grafo de código obsoleto** — el `graphify-out/` (commit `c01f1c07`) fue BORRADO el 2026-07-19
+   por obsoleto. El plugin `.opencode/plugins/graphify.js` sigue disponible; regenerar un grafo
+   fresco solo si se necesita como mapa de arquitectura (evaluar si conviene usar CodeGraph en su lugar).
+8. **`HANDOFF.md` inflado** — el archivo acumuló sesiones y es difícil de escanear; convendría
+   compactar la historia vieja a un apéndice y dejar arriba solo estado + deuda + próximos pasos.
+
+### ✅ Lo que SÍ está bien (no tocar)
+- `tsconfig` con `strict: true` — buena base de tipos.
+- Capa `lib/` aísla Supabase del resto de la app (buen límite arquitectónico).
+- Zustand con `persist` para UI/sidebar — patrón correcto.
+- RPC `buscar_productos` como `security invoker` — aísla por RLS, sin lints 0028/0029.
 
 ## Conexión al proyecto Supabase (NO hardcodear keys en chat)
 - **Proyecto:** `pvopcajqersioqlmccwg` → URL `https://pvopcajqersioqlmccwg.supabase.co`
@@ -108,7 +168,10 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
    - Desactivar/reactivar actualiza solo la fila (no recarga toda la lista ni pierde scroll).
    - **Rediseño UI**: layout dos columnas (sidebar de categorías sticky + main) con **toggle grid/lista** (cards estilo POS + tabla). Referencias: Square/Lightspeed/Odoo/Toast usan cards + sidebar de filtros; Odoo toggle grid/list. `CatalogoPage.tsx` + `index.css`.
    - ⚠️ **PENDIENTE ANTES DE CARRITO**: revisar y aplicar este mismo lenguaje visual (cards, sidebar, toggle, badges, sticky) a las demás pantallas (Login/Registro, Venta, etc.) para consistencia. El catálogo quedó como referencia de estilo.
- 6. **[EN CURSO] Consolidar Catálogo — PRÓXIMO PASO CRÍTICO: resolver RPC `buscar_productos` (patch_07).** El error "structure of query does not match function result type" persiste; ver sección de estado arriba para hipótesis y pasos. Hasta resolverlo el catálogo queda vacío.
+  6. **[REDIRECCIONADO 2026-07-19] Catálogo no está vacío por el SQL:** el "bloqueador RPC" era un
+     mito. El fix real es frontend (tipado `numeric`→`string` + mensaje de error si el RPC falla).
+     Ver "RPC buscar_productos — MITO ACLARADO" y deuda técnica item 4. Prioridad: corregir el parseo
+     de `numeric` y los catch silenciosos (item 3) antes de seguir puliendo UX.
  7. **[PAUSADO] `supabase/alta_sucursal.py`:** clonado de catálogo a sucursales.
  8. **[PAUSADO] Pantalla de venta (carrito) — usa `terminal_pos_*` del experto como blueprint.**
  9. **[PAUSADO] Impresión térmica / Offline / Crédito.**
@@ -152,9 +215,10 @@ Requisitos: **Git** + **Node.js 20+**. (Python solo si se re-corre el seed.)
 - NO correr comandos con la secret key desde el asistente; el usuario la pone en su terminal.
 - Las rutas con `\U` en docstrings de Python rompen (unicodeescape); usar `os.path.join`.
 - **Material Symbols:** usar Google Fonts con `text=` acotado a los iconos usados (~15), NO el npm `material-symbols` (pesaba 12.8 MB: 3 variantes de fuente completas).
-- **RPC con `RETURNS TABLE` + `return query` (plpgsql):** el SELECT debe coincidir EXACTO en número, orden y TIPO con la tabla. Forzar casts (`::int`, `::jsonb`) en ambas ramas (`if`/`else`) del bloque, porque el planner puede inferir `bigint` en un `min(case...)` y romper con "structure of query does not match function result type". Verificar tipos reales de la tabla con `information_schema.columns` antes de declarar el `RETURNS TABLE`.
+- **RPC con `RETURNS TABLE` + `return query` (plpgsql):** el SELECT debe coincidir EXACTO en número, orden y TIPO con la tabla. Forzar casts (`::int`, `::jsonb`) en ambas ramas (`if`/`else`) del bloque, porque el planner puede inferir `bigint` en un `min(case...)` y romper con "structure of query does not match function result type". Verificar tipos reales de la tabla con `information_schema.columns` antes de declarar el `RETURNS TABLE`. (Nota 2026-07-19: el RPC `buscar_productos` ya cumple esto y es `security invoker`; el error histórico era frontend, no SQL — ver "RPC buscar_productos — MITO ACLARADO".)
 - **Búsqueda a escala:** el ranking debe hacerse en el SERVIDOR (RPC), no traer todas las coincidencias al cliente (se rompe con 2000+ productos).
-- **No dejar el catálogo en blanco si el RPC falta:** al cambiar `listarProductos` a `supabase.rpc`, si el RPC no existe la pantalla queda vacía sin feedback. Considerar fallback o mensaje de error claro.
+- **NUMERIC de Postgres = STRING en JSON (PostgREST):** las columnas `numeric` (`precio_usd`, `costo_usd`) llegan al frontend como `string`. NUNCA asumir `number` ni usar `Number()` con default silencioso. Tipar como `string` y convertir en capa de presentación con parser explícito + fallback visible. Este fue el bug raíz del "catálogo vacío", no el SQL.
+- **No silenciar errores en catch (swallow):** `CommandPalette.tsx:27` y `listarCategorias` tragaban el error y dejaban la UI vacía sin explicación. Loggear SIEMPRE y mostrar mensaje de error al usuario.
 - `maybe_single()` de supabase-py retorna `None` al no hallar fila → usar `.limit(1).execute()` y chequear `res.data`.
 - `.insert().select().limit(1)` no existe en sync builder → usar `.select().execute()` solamente.
 - **NUNCA crear usuario admin insertando directo en `auth.users` por SQL.** Queda "invisible" para GoTrue: el login da 400 `invalid_credentials` aunque `encrypted_password`, `aud='authenticated'`, `email_confirmed_at` y `pass_ok` sean correctos (el Auth Log muestra `auth_user: null`). Crear SIEMPRE desde Dashboard → Authentication → Users → Add user (Auto Confirm) y luego insertar la fila en `public.usuario` ligando `empresa_id`. (Verificado 2026-07-18: se perdió ~1h en esto.)

@@ -24,7 +24,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const t = setTimeout(() => {
       listarProductos({ search: s, soloActivos: false, pageSize: 8 })
         .then((r) => setResultados(r.items))
-        .catch(() => setResultados([]))
+        .catch((err) => {
+          console.error('[CommandPalette] falló la búsqueda:', err)
+          setResultados([])
+        })
     }, 200)
     return () => clearTimeout(t)
   }, [q])

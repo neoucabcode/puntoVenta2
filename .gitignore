@@ -29,3 +29,4 @@ build/
 .opencode/
 imagenesNuevas/
 web/tsconfig.tsbuildinfo
+.codegraph/

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { limpiarCacheEmpresa } from '../lib/empresa'
 import type { User } from '@supabase/supabase-js'
 import {
   loginMock,
@@ -52,6 +53,7 @@ export async function crearEmpresaConAdmin(
 }
 
 export async function logout(): Promise<void> {
+  limpiarCacheEmpresa()
   if (!supabase) {
     await logoutMock()
     return

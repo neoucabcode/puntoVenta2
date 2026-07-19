@@ -20,6 +20,9 @@ export type Producto = {
   nombre: string
   categoria_id: string | null
   unidad: string
+  // El dominio es numérico, pero PostgREST lo trae como string. Se parsea
+  // con parseNumeric() (lanza si está roto) en listarProductos, NO con
+  // Number(??0) silencioso (deuda técnica item 4: catálogo vacío/erróneo).
   costo_usd: number
   precio_usd: number
   imagen_url: string | null
@@ -29,6 +32,18 @@ export type Producto = {
 }
 
 export const PAGE_SIZE = 50
+
+// Convierte el string que PostgREST devuelve para numeric en número.
+// Si el valor es inválido, lanza en vez de devolver 0 silencioso (evita
+// catálogo vacío/erróneo por datos rotos).
+function parseNumeric(v: unknown, campo: string): number {
+  if (v === null || v === undefined || v === '') return 0
+  const n = Number(v)
+  if (Number.isNaN(n)) {
+    throw new Error(`Campo numérico inválido "${campo}": ${String(v)}`)
+  }
+  return n
+}
 
 export type ListarResult = {
   items: ProductoJoin[]
@@ -94,11 +109,11 @@ export async function listarProductos(opts?: {
       nombre: r.nombre as string,
       categoria_id: (r.categoria_id as string) ?? null,
       unidad: (r.unidad as string) ?? 'unidad',
-      costo_usd: Number(r.costo_usd ?? 0),
-      precio_usd: Number(r.precio_usd ?? 0),
+      costo_usd: parseNumeric(r.costo_usd, 'costo_usd'),
+      precio_usd: parseNumeric(r.precio_usd, 'precio_usd'),
       imagen_url: (r.imagen_url as string) ?? null,
-      stock_actual: Number(r.stock_actual ?? 0),
-      stock_minimo: Number(r.stock_minimo ?? 0),
+      stock_actual: parseNumeric(r.stock_actual, 'stock_actual'),
+      stock_minimo: parseNumeric(r.stock_minimo, 'stock_minimo'),
       activo: Boolean(r.activo),
       categoria: cat ? { id: cat.id, nombre: cat.nombre } : null,
     } as ProductoJoin

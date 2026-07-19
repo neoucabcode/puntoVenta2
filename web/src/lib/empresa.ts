@@ -61,3 +61,9 @@ export async function obtenerMiEmpresaId(): Promise<string | null> {
   empresaIdCache = (data?.empresa_id as string) ?? null
   return empresaIdCache
 }
+
+// Limpia la cache de módulo. Debe llamarse en logout/cambio de cuenta para
+// no devolver el empresa_id de una sesión anterior (deuda técnica item 2).
+export function limpiarCacheEmpresa(): void {
+  empresaIdCache = undefined
+}
