@@ -72,10 +72,6 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 - **Config del Dashboard aplicada (NO está en el repo, hay que replicar si se cambia de proyecto Supabase):**
   - Authentication → Email → **"Confirm email" DESACTIVADO** (para MVP: el usuario queda logueado al instante tras signUp; el RPC de alta necesita `auth.uid()`).
 - **Catálogo sembrado:** `supabase/seed_catalogo.py` YA EJECUTADO. Resultado: **564 productos** insertados (86 sin precio → `precio_usd=0`, se editan desde la app), **72 imágenes** `.webp` subidas a bucket `productos/` y enlazadas por `imagen_url`. 8 categorías creadas.
-- **Grafo graphify:** `graphify-out/` presente (68 nodos / 78 aristas). Plugin en `.opencode/plugins/graphify.js`.
-  ⚠️ **OBSOLETO**: el grafo se generó en el commit `c01f1c07` y el código ha cambiado desde entonces
-  (rediseño de catálogo, RPC, tema light/dark, sidebar colapsable). No refleja el estado actual.
-  Regenerar con `graphify` antes de usarlo como mapa, o ignorarlo.
 
 ## Deuda técnica real (auditoría 2026-07-19 — verificada, NO especulativa)
 
@@ -105,9 +101,8 @@ Empresa del dueño: **FerrehogarMart** (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b
 ### 🟡 Medios (UX / claridad)
 6. **Paginación falsa** — el "scroll infinito" trae `.limit(500)` hardcodeado y no pagina de verdad;
    con 2000+ productos se rompe. *Fix:* paginar con cursor/offset real contra el RPC.
-7. **Grafo de código obsoleto** — el `graphify-out/` (commit `c01f1c07`) fue BORRADO el 2026-07-19
-   por obsoleto. El plugin `.opencode/plugins/graphify.js` sigue disponible; regenerar un grafo
-   fresco solo si se necesita como mapa de arquitectura (evaluar si conviene usar CodeGraph en su lugar).
+7. **Grafo de código** — el orchestrator de este proyecto usa **CodeGraph** (`.codegraph/`, generado
+   con `codegraph init`) como mapa de código vivo. El plugin `graphify.js` quedó desactivado; no usarlo.
 8. **`HANDOFF.md` inflado** — el archivo acumuló sesiones y es difícil de escanear; convendría
    compactar la historia vieja a un apéndice y dejar arriba solo estado + deuda + próximos pasos.
 
@@ -203,7 +198,6 @@ Requisitos: **Git** + **Node.js 20+**. (Python solo si se re-corre el seed.)
 > Si usás opencode: decí "matrix" y el AGENTS.md te retoma solo. Si no, leé este HANDOFF.
 
 ## Notas de método
-- graphify CLI: `$py -m graphify extract docs --backend gemini --no-cluster`. El grafo está en `graphify-out/`. OPCIONAL (ver setup).
 - Regla de trazabilidad: todo se etiqueta Hecho / Supuesto / Decisión pendiente / Recomendación futura.
 - El seed es idempotente: se puede correr de nuevo sin duplicar (empareja por `sku`+`empresa`).
 - **2 warnings intencionales en Security Advisor** (NO son bugs, se pueden dismiss):

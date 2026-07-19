@@ -8,9 +8,9 @@
 2. Corré `git status` y `git log --oneline -5` para ver qué cambió.
 3. Confirmá el foco con el usuario antes de asumir.
 
-Este ritual funciona SIN herramientas externas (Engram, graphify, CodeGraph). Esas son
-opcionales y locales a la PC del autor; el proyecto NO depende de ellas. `HANDOFF.md` es
-autosuficiente: cualquier asistente en cualquier PC retoma leyéndolo.
+Este ritual retoma el estado del proyecto leyendo `HANDOFF.md`. El orchestrator de este
+proyecto usa **CodeGraph** como mapa de código vivo (`.codegraph/`, generado localmente con
+`codegraph init`); no se usa graphify. `HANDOFF.md` es la fuente de verdad del estado.
 
 ## Qué es este proyecto
 Punto de venta para ferretería bimonetaria (Venezuela: BS/USD). Multi-tenant: la misma app
@@ -29,7 +29,6 @@ auditoría 2026-07-19. Resumen para no repetir errores:
 - **Mito aclarado:** el error "structure of query does not match function result type" del RPC
   `buscar_productos` NO es de SQL (el RPC está bien tipado y es `security invoker`). Es un mismatch
   cliente↔servidor por `numeric`→`string`. No vuelvas a parchear el SQL.
-- **Grafo `graphify-out/` está OBSOLETO** (commit `c01f1c07`); no lo uses como mapa actual.
 
 ## Setup rápido (otra PC)
 Ver la sección "Setup desde cero en OTRA PC" dentro de `HANDOFF.md`. Requiere Git + Node 20+.
