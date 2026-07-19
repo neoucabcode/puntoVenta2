@@ -9,6 +9,7 @@ import {
   type ProductoJoin,
   type Categoria,
 } from '../lib/productos'
+import { importarCatalogoMock } from '../lib/mock-data'
 import { ProductoForm } from '../components/ProductoForm'
 import { DataTable } from '../components/DataTable'
 
@@ -25,6 +26,7 @@ export function CatalogoPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
+  const [importando, setImportando] = useState(false)
   const sentinelaRef = useRef<HTMLDivElement | null>(null)
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
@@ -136,6 +138,26 @@ export function CatalogoPage() {
     }
   }
 
+  async function onImportarCatalogo(file: File | null) {
+    if (!file) return
+    try {
+      setImportando(true)
+      const { imported, categories } = await importarCatalogoMock(file)
+      setError('')
+      setCategorias((prev) => {
+        const merged = [...prev]
+        merged.push(...(categories > 0 ? [] : []))
+        return merged
+      })
+      await refrescar()
+      setError(`Se importaron ${imported} productos y ${categories} categorías.`)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setImportando(false)
+    }
+  }
+
   const edicion = editId ? productos.find((p) => p.id === editId) ?? null : null
 
   function stockEstado(p: ProductoJoin): 'ok' | 'warn' | 'off' {
@@ -212,6 +234,22 @@ export function CatalogoPage() {
               title="Lista"
             ><span className="material-symbols-outlined">list</span></button>
           </div>
+          <label className="import-button">
+            <input
+              type="file"
+              accept=".json,.csv"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null
+                if (file) {
+                  void onImportarCatalogo(file)
+                }
+                e.target.value = ''
+              }}
+              disabled={importando}
+            />
+            <span className="material-symbols-outlined">upload_file</span>
+            {importando ? 'Importando…' : 'Importar catálogo'}
+          </label>
           <button className="primary" onClick={() => setShowNuevo(true)}>
             <span className="material-symbols-outlined">add</span> Nuevo producto
           </button>

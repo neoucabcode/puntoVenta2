@@ -1,5 +1,17 @@
 import { supabase } from './supabase'
 import { obtenerMiEmpresaId } from './empresa'
+import {
+  listarProductosMock,
+  listarCategoriasMock,
+  crearProductoMock,
+  actualizarProductoMock,
+  desactivarProductoMock,
+  reactivarProductoMock,
+  crearCategoriaMock,
+  subirImagenProductoMock,
+  verificarSkuDuplicadoMock,
+  verificarCodigoDuplicadoMock,
+} from './mock-data'
 
 export type Producto = {
   id: string
@@ -53,13 +65,16 @@ export async function listarProductos(opts?: {
   offset?: number
   pageSize?: number
 }): Promise<ListarResult> {
+  if (!supabase) {
+    const res = await listarProductosMock(opts)
+    return { items: res.items as ProductoJoin[], hasMore: res.hasMore }
+  }
+
   const limit = opts?.pageSize ?? PAGE_SIZE
   const offset = opts?.offset ?? 0
   const empresaId = await obtenerMiEmpresaId()
   if (!empresaId) return { items: [], hasMore: false }
 
-  // RPC buscar_productos: rankea y pagina en el SERVIDOR (escala a miles de
-  // productos sin traer todo al cliente). Hereda RLS => aislado por tenant.
   const { data, error } = await supabase.rpc('buscar_productos', {
     p_empresa_id: empresaId,
     p_search: opts?.search?.trim() ?? '',
@@ -89,13 +104,15 @@ export async function listarProductos(opts?: {
     } as ProductoJoin
   })
 
-  // El RPC no devuelve count total; estimamos hasMore por si volvio menos que
-  // el limite. Para scroll infinito esto es suficiente y correcto.
   const hasMore = items.length >= limit
   return { items, hasMore }
 }
 
 export async function listarCategorias(): Promise<Categoria[]> {
+  if (!supabase) {
+    const data = await listarCategoriasMock()
+    return data
+  }
   const { data, error } = await supabase
     .from('categoria')
     .select('id,nombre')
@@ -105,6 +122,9 @@ export async function listarCategorias(): Promise<Categoria[]> {
 }
 
 export async function crearProducto(input: ProductoInput): Promise<Producto> {
+  if (!supabase) {
+    return crearProductoMock(input) as Promise<Producto>
+  }
   const { data, error } = await supabase
     .from('producto')
     .insert({
@@ -130,6 +150,9 @@ export async function actualizarProducto(
   id: string,
   input: ProductoInput
 ): Promise<Producto> {
+  if (!supabase) {
+    return actualizarProductoMock(id, input) as Promise<Producto>
+  }
   const { data, error } = await supabase
     .from('producto')
     .update({
@@ -153,6 +176,10 @@ export async function actualizarProducto(
 }
 
 export async function desactivarProducto(id: string): Promise<void> {
+  if (!supabase) {
+    await desactivarProductoMock(id)
+    return
+  }
   const { error } = await supabase
     .from('producto')
     .update({ activo: false })
@@ -161,6 +188,10 @@ export async function desactivarProducto(id: string): Promise<void> {
 }
 
 export async function reactivarProducto(id: string): Promise<void> {
+  if (!supabase) {
+    await reactivarProductoMock(id)
+    return
+  }
   const { error } = await supabase
     .from('producto')
     .update({ activo: true })
@@ -169,6 +200,9 @@ export async function reactivarProducto(id: string): Promise<void> {
 }
 
 export async function crearCategoria(nombre: string): Promise<Categoria> {
+  if (!supabase) {
+    return crearCategoriaMock(nombre)
+  }
   const { data, error } = await supabase
     .from('categoria')
     .insert({ nombre })
@@ -183,6 +217,9 @@ export async function subirImagenProducto(
   empresaId: string,
   productoId: string
 ): Promise<string> {
+  if (!supabase) {
+    return subirImagenProductoMock(file, empresaId, productoId)
+  }
   const ext = file.name.split('.').pop()?.toLowerCase() || 'webp'
   const path = `${empresaId}/${productoId}.${ext}`
   const { error } = await supabase.storage
@@ -197,6 +234,9 @@ export async function verificarSkuDuplicado(
   sku: string | null,
   ignorarId?: string | null
 ): Promise<boolean> {
+  if (!supabase) {
+    return verificarSkuDuplicadoMock(sku)
+  }
   if (!sku) return false
   let q = supabase
     .from('producto')
@@ -213,6 +253,9 @@ export async function verificarCodigoDuplicado(
   codigo: string | null,
   ignorarId?: string | null
 ): Promise<boolean> {
+  if (!supabase) {
+    return verificarCodigoDuplicadoMock(codigo)
+  }
   if (!codigo) return false
   let q = supabase
     .from('producto')

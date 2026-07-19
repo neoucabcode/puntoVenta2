@@ -22,7 +22,7 @@ type Props<T> = {
   rowKey: (row: T, i: number) => string
   /** Slot encima de la tabla (toolbar: buscador, filtros, acciones). */
   toolbar?: ReactNode
-  /** Altura máxima del cuerpo scrolleable. Por defecto 60vh. */
+  /** Altura máxima del cuerpo scrolleable. Por defecto ocupa el alto del contenedor padre. */
   maxHeight?: string
   /** Mensaje cuando no hay filas. */
   empty?: ReactNode
@@ -47,7 +47,7 @@ export function DataTable<T>({
   filas,
   rowKey,
   toolbar,
-  maxHeight = '60vh',
+  maxHeight = '100%',
   empty = 'No hay datos',
   isInactivo,
   className,

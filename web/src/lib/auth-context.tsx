@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
+import { getMockSession, subscribeMockAuth } from './mock-data'
 
 type AuthState = {
   session: Session | null
@@ -14,6 +15,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!supabase) {
+      setSession(getMockSession())
+      setLoading(false)
+      const unsubscribe = subscribeMockAuth((next) => setSession(next))
+      return () => unsubscribe()
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setLoading(false)

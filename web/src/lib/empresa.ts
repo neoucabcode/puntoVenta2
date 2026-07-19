@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { getMockEmpresa, getMockEmpresaId } from './mock-data'
 
 export type Empresa = {
   id: string
@@ -11,6 +12,11 @@ export type Empresa = {
 }
 
 export async function crearEmpresa(nombre: string): Promise<Empresa> {
+  if (!supabase) {
+    const empresa = getMockEmpresa()
+    if (!empresa) throw new Error('No hay empresa local creada')
+    return empresa
+  }
   const { data, error } = await supabase
     .from('empresa')
     .insert({ nombre })
@@ -21,6 +27,9 @@ export async function crearEmpresa(nombre: string): Promise<Empresa> {
 }
 
 export async function obtenerMiEmpresa(): Promise<Empresa | null> {
+  if (!supabase) {
+    return getMockEmpresa()
+  }
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) return null
   const { data } = await supabase
@@ -35,6 +44,10 @@ export async function obtenerMiEmpresa(): Promise<Empresa | null> {
 let empresaIdCache: string | null | undefined
 export async function obtenerMiEmpresaId(): Promise<string | null> {
   if (empresaIdCache !== undefined) return empresaIdCache
+  if (!supabase) {
+    empresaIdCache = getMockEmpresaId()
+    return empresaIdCache
+  }
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) {
     empresaIdCache = null
