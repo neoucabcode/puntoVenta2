@@ -12,6 +12,8 @@ import {
 import { importarCatalogoMock } from '../lib/mock-data'
 import { ProductoForm } from '../components/ProductoForm'
 import { DataTable } from '../components/DataTable'
+import { useCajaStore } from '../store/useCajaStore'
+import { registrarVentaOffline } from '../lib/ventaOffline'
 
 export function CatalogoPage() {
   const [productos, setProductos] = useState<ProductoJoin[]>([])
@@ -33,6 +35,15 @@ export function CatalogoPage() {
   const offsetRef = useRef(0)
   const cargandoRef = useRef(false)
   const [vista, setVista] = useState<'grid' | 'lista'>('grid')
+
+  // Modo solo-lectura: si la caja está habilitada (RN-53) y este dispositivo no
+  // tiene caja abierta, el catálogo es solo consulta (REQ-2).
+  const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
+  const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
+  const soloLectura = cajaHabilitada && !cajaAbierta
+  const puedeEditar = !soloLectura
+  const [vendiendoId, setVendiendoId] = useState<string | null>(null)
+  const [msgVenta, setMsgVenta] = useState('')
 
   const cargarPagina = useCallback(
     async (reset: boolean) => {
@@ -125,6 +136,19 @@ export function CatalogoPage() {
     }
   }
 
+  async function onVender(p: ProductoJoin) {
+    setVendiendoId(p.id)
+    setMsgVenta('')
+    try {
+      await registrarVentaOffline(p)
+      setMsgVenta(`Venta registrada (pendiente de sincronizar): ${p.nombre}`)
+    } catch (err) {
+      setMsgVenta(`Error al registrar la venta: ${(err as Error).message}`)
+    } finally {
+      setVendiendoId(null)
+    }
+  }
+
   async function onCrearCategoria() {
     const n = nuevaCategoria.trim()
     if (!n) return
@@ -193,17 +217,19 @@ export function CatalogoPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          <details className="nueva-cat">
-            <summary>+ Nueva categoría</summary>
-            <div className="row">
-              <input
-                placeholder="Nombre"
-                value={nuevaCategoria}
-                onChange={(e) => setNuevaCategoria(e.target.value)}
-              />
-              <button onClick={onCrearCategoria}>Crear</button>
-            </div>
-          </details>
+          {puedeEditar && (
+            <details className="nueva-cat">
+              <summary>+ Nueva categoría</summary>
+              <div className="row">
+                <input
+                  placeholder="Nombre"
+                  value={nuevaCategoria}
+                  onChange={(e) => setNuevaCategoria(e.target.value)}
+                />
+                <button onClick={onCrearCategoria}>Crear</button>
+              </div>
+            </details>
+          )}
         </div>
         <div className="catalogo-head-actions">
           <input
@@ -250,15 +276,22 @@ export function CatalogoPage() {
             <span className="material-symbols-outlined">upload_file</span>
             {importando ? 'Importando…' : 'Importar catálogo'}
           </label>
-          <button className="primary" onClick={() => setShowNuevo(true)}>
-            <span className="material-symbols-outlined">add</span> Nuevo producto
-          </button>
+          {puedeEditar && (
+            <button className="primary" onClick={() => setShowNuevo(true)}>
+              <span className="material-symbols-outlined">add</span> Nuevo producto
+            </button>
+          )}
         </div>
       </header>
 
       <div className="catalogo-body">
         <main className="catalogo-main">
-          {error && <p className="error">{error}</p>}
+           {error && <p className="error">{error}</p>}
+           {msgVenta && (
+             <p style={{ fontWeight: 600, color: msgVenta.startsWith('Error') ? '#dc2626' : '#16a34a' }}>
+               {msgVenta}
+             </p>
+           )}
 
           {loading ? (
             <p>Cargando…</p>
@@ -298,20 +331,27 @@ export function CatalogoPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="card-actions">
-                        <button onClick={() => setEditId(p.id)}>
-                          <span className="material-symbols-outlined">edit</span> Editar
-                        </button>
-                        {p.activo ? (
-                          <button onClick={() => onDesactivar(p)}>
-                            <span className="material-symbols-outlined">delete</span> Desactivar
-                          </button>
-                        ) : (
-                          <button onClick={() => onReactivar(p)}>
-                            <span className="material-symbols-outlined">check_circle</span> Reactivar
-                          </button>
-                        )}
-                      </div>
+                       <div className="card-actions">
+                         {puedeEditar && (
+                           <button onClick={() => setEditId(p.id)}>
+                             <span className="material-symbols-outlined">edit</span> Editar
+                           </button>
+                         )}
+                         {puedeEditar && (p.activo ? (
+                           <button onClick={() => onDesactivar(p)}>
+                             <span className="material-symbols-outlined">delete</span> Desactivar
+                           </button>
+                         ) : (
+                           <button onClick={() => onReactivar(p)}>
+                             <span className="material-symbols-outlined">check_circle</span> Reactivar
+                           </button>
+                         ))}
+                         {puedeEditar && (
+                           <button onClick={() => onVender(p)} disabled={vendiendoId === p.id}>
+                             <span className="material-symbols-outlined">point_of_sale</span> Vender
+                           </button>
+                         )}
+                       </div>
                     </article>
                   )
                 })}
@@ -351,16 +391,23 @@ export function CatalogoPage() {
                   key: 'acciones', titulo: '', hideHeader: true, className: 'dt-actions',
                   render: (p: ProductoJoin) => (
                     <>
-                      <button onClick={() => setEditId(p.id)} title="Editar">
-                        <span className="material-symbols-outlined">edit</span>
-                      </button>
-                      {p.activo ? (
+                      {puedeEditar && (
+                        <button onClick={() => setEditId(p.id)} title="Editar">
+                          <span className="material-symbols-outlined">edit</span>
+                        </button>
+                      )}
+                      {puedeEditar && (p.activo ? (
                         <button onClick={() => onDesactivar(p)} title="Desactivar">
                           <span className="material-symbols-outlined">delete</span>
                         </button>
                       ) : (
                         <button onClick={() => onReactivar(p)} title="Reactivar">
                           <span className="material-symbols-outlined">check_circle</span>
+                        </button>
+                      ))}
+                      {puedeEditar && (
+                        <button onClick={() => onVender(p)} title="Vender" disabled={vendiendoId === p.id}>
+                          <span className="material-symbols-outlined">point_of_sale</span>
                         </button>
                       )}
                     </>

@@ -72,9 +72,9 @@ Chain strategy: pending
 
 ## Phase 5: UI — solo-lectura + badge
 
-- [ ] 5.1 `CatalogoPage.tsx`: leer `cajaAbierta` de `useCajaStore`; si caja habilitada y NO abierta → ocultar botones "Crear", "Editar", "Borrar", "Vender" (REQ-2 escenario consulta). Si caja deshabilitada (RN-53) → mostrar controles.
-- [ ] 5.2 `ProductoForm.tsx` / botones de venta: deshabilitar acción "vender" cuando `!cajaAbierta` y caja habilitada. En `PosPage.tsx` enrutar la venta a `colaOffline.guardarEvento` (offline-first) en vez de insert directo.
-- [ ] 5.3 `Layout.tsx`: badge de pendientes en `topbar` (leer `pendientes` de `useCajaStore`); mostrar "X pendientes" y estado online/offline. Ocultar si `pendientes===0`.
+- [x] 5.1 `CatalogoPage.tsx`: leer `cajaAbierta` de `useCajaStore`; si caja habilitada y NO abierta → ocultar botones "Crear", "Editar", "Borrar", "Vender" (REQ-2 escenario consulta). Si caja deshabilitada (RN-53) → mostrar controles.
+- [x] 5.2 `ProductoForm.tsx` / botones de venta: deshabilitar acción "vender" cuando `!cajaAbierta` y caja habilitada. En `PosPage.tsx` enrutar la venta a `colaOffline.guardarEvento` (offline-first) en vez de insert directo.
+- [x] 5.3 `Layout.tsx`: badge de pendientes en `topbar` (leer `pendientes` de `useCajaStore`); mostrar "X pendientes" y estado online/offline. Ocultar si `pendientes===0`.
 
 **Archivos**: `web/src/pages/CatalogoPage.tsx`, `web/src/components/ProductoForm.tsx`, `web/src/pages/PosPage.tsx`, `web/src/components/Layout.tsx`.
 **Dependencias**: 3.1 (store).
