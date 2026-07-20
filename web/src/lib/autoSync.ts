@@ -28,18 +28,29 @@ type Handlers = {
   onCambioEstado?: (online: boolean, pendientes: number) => void
   rpc?: RpcImpl
   heartbeatMs?: number
+  // Ping liviano para el heartbeat; por defecto consulta Supabase. Inyectable
+  // para testear la recuperación sin cliente real (W2).
+  ping?: () => Promise<boolean>
 }
 
+// Reintento con backoff exponencial (W2): 1s, 2s, 4s... cap 30s.
+const BACKOFF_BASE_MS = 1000
+const BACKOFF_CAP_MS = 30000
+
 let syncing = false
+// Timer de reintento de la cola. Se autolimpia al iniciar cada sync para
+// evitar timers huérfanos/acumulados.
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+// Contador de reintentos fallidos para escalar el backoff; se reinicia en
+// un ciclo totalmente exitoso.
+let reintentos = 0
 
 export function estaOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
 }
 
 async function contarPendientes(): Promise<number> {
-  const dispositivo = getDeviceId()
-  const pend = await cola.listarPendientes(dispositivo)
-  return pend.length
+  return cola.contarPendientes(getDeviceId())
 }
 
 // RPC real contra Supabase (aplicar_venta_offline, security invoker).
@@ -58,12 +69,29 @@ async function rpcReal(p: RpcParams): Promise<RpcResult> {
 }
 
 // Sube todos los eventos pendientes. Idempotente: cada evento se intenta una
-// vez por ciclo (flag `syncing`); si el RPC falla, se incrementa el intento y el
-// evento queda pendiente para el siguiente ciclo (backoff entre ciclos, REQ-4).
-export async function sincronizarPendientes(opts?: { rpc?: RpcImpl }): Promise<void> {
+// vez por ciclo (flag `syncing`); si el RPC falla, se incrementa el intento y
+// se agenda un reintento con backoff exponencial (W2). Los eventos en
+// 'sync_error' (p.ej. sin usuario_id, W4) NO se reintentan: requieren
+// intervención. El RPC es idempotente, así que los reintentos no duplican.
+export async function sincronizarPendientes(opts?: {
+  rpc?: RpcImpl
+  backoffBaseMs?: number
+  backoffCapMs?: number
+  // Fuerza el sync aunque navigator.onLine sea false (usado en recovery de
+  // heartbeat: Supabase responde aunque el navegador crea que está offline).
+  forzarOnline?: boolean
+  // Scheduler del reintento (inyectable para tests). Por defecto setTimeout.
+  schedule?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
+}): Promise<void> {
+  // Cancela cualquier reintento pendiente: cada sync reevalúa desde cero.
+  if (retryTimer) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
   if (syncing) return
-  if (!estaOnline()) return
+  if (!estaOnline() && !opts?.forzarOnline) return
   syncing = true
+  let huboFallo = false
   try {
     const dispositivo = getDeviceId()
     const pendientes = await cola.listarPendientes(dispositivo)
@@ -81,10 +109,25 @@ export async function sincronizarPendientes(opts?: { rpc?: RpcImpl }): Promise<v
         await cola.marcarSyncOk(ev.id_evento)
       } catch {
         await cola.incrementarIntento(ev.id_evento)
+        huboFallo = true
       }
     }
   } finally {
     syncing = false
+  }
+  // Backoff: si hubo fallos y seguimos online, agenda el próximo ciclo.
+  if (huboFallo && estaOnline()) {
+    reintentos += 1
+    const base = opts?.backoffBaseMs ?? BACKOFF_BASE_MS
+    const cap = opts?.backoffCapMs ?? BACKOFF_CAP_MS
+    const delay = Math.min(cap, base * 2 ** (reintentos - 1))
+    const schedule = opts?.schedule ?? ((fn, ms) => setTimeout(fn, ms))
+    retryTimer = schedule(() => {
+      retryTimer = null
+      void sincronizarPendientes(opts)
+    }, delay)
+  } else if (!huboFallo) {
+    reintentos = 0
   }
 }
 
@@ -96,8 +139,8 @@ export function iniciarAutoSync(handlers: Handlers = {}): () => void {
     handlers.onCambioEstado?.(estaOnline(), await contarPendientes())
   }
 
-  const sincronizar = () => {
-    void sincronizarPendientes({ rpc: handlers.rpc }).then(() => notificar())
+  const sincronizar = (forzar = false) => {
+    void sincronizarPendientes({ rpc: handlers.rpc, forzarOnline: forzar }).then(() => notificar())
   }
 
   const onOnline = () => {
@@ -108,6 +151,20 @@ export function iniciarAutoSync(handlers: Handlers = {}): () => void {
     void notificar()
   }
 
+  // Ping por defecto: select liviano a Supabase. Inyectable para tests (W2).
+  const doPing = handlers.ping ?? (async (): Promise<boolean> => {
+    if (!supabase) return false
+    try {
+      await supabase
+        .from('sesion_caja')
+        .select('id', { count: 'exact', head: true })
+        .limit(1)
+      return true
+    } catch {
+      return false
+    }
+  })
+
   if (typeof window !== 'undefined') {
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
@@ -115,18 +172,17 @@ export function iniciarAutoSync(handlers: Handlers = {}): () => void {
     if (estaOnline()) sincronizar()
 
     // Heartbeat: detecta caída real de Supabase aunque navigator.onLine sea true.
-    if (supabase) {
+    // Al recuperar (caído->conectado) dispara el flush de la cola (W2).
+    if (supabase || handlers.ping) {
       const ms = handlers.heartbeatMs ?? 30000
+      let ultimoOnline = estaOnline()
       heartbeatTimer = setInterval(async () => {
-        try {
-          await supabase!
-            .from('sesion_caja')
-            .select('id', { count: 'exact', head: true })
-            .limit(1)
-          handlers.onCambioEstado?.(true, await contarPendientes())
-        } catch {
-          handlers.onCambioEstado?.(false, await contarPendientes())
+        const onlineAhora = await doPing()
+        handlers.onCambioEstado?.(onlineAhora, await contarPendientes())
+        if (onlineAhora && !ultimoOnline) {
+          sincronizar(true) // recovery: flush automático de la cola (forza online)
         }
+        ultimoOnline = onlineAhora
       }, ms)
     }
   }

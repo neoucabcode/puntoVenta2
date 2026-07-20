@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { sincronizarPendientes, type RpcParams } from './autoSync'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { sincronizarPendientes, iniciarAutoSync, type RpcParams } from './autoSync'
 import {
   guardarEvento,
   listarPendientes,
@@ -78,5 +78,58 @@ describe('autoSync.ts', () => {
     await sincronizarPendientes({ rpc })
     expect(rpc).toHaveBeenCalledTimes(2)
     expect(await listarPendientes(DEVICE)).toHaveLength(0)
+  })
+
+  it('W2: fallo->éxito reintenta con backoff exponencial y eventualmente sincroniza', async () => {
+    await guardarEvento(evento('evt-backoff-1'))
+    const delays: number[] = []
+    const rpc = vi.fn()
+    rpc.mockRejectedValueOnce(new Error('network'))
+    rpc.mockRejectedValueOnce(new Error('network'))
+    rpc.mockResolvedValueOnce({ insertado: true })
+
+    // scheduler inyectado que registra los delays de backoff (base pequeña).
+    const schedule = (fn: () => void, ms: number) => {
+      delays.push(ms)
+      return setTimeout(fn, ms)
+    }
+
+    await sincronizarPendientes({ rpc, backoffBaseMs: 10, backoffCapMs: 100, schedule })
+    expect(rpc).toHaveBeenCalledTimes(1)
+
+    // Los reintentos ocurren de forma asíncrona con backoff; esperamos a que
+    // el evento quede sincronizado (rpc llamado 3 veces, idempotente).
+    await vi.waitFor(() => expect(rpc).toHaveBeenCalledTimes(3), { timeout: 3000 })
+    expect(await listarPendientes(DEVICE)).toHaveLength(0)
+    // Backoff exponencial: 10ms, luego 20ms (base*2^0, base*2^1).
+    expect(delays[0]).toBe(10)
+    expect(delays[1]).toBe(20)
+  })
+})
+
+describe('autoSync.ts — heartbeat recovery (W2)', () => {
+  beforeEach(async () => {
+    await limpiar()
+    localStorage.setItem('pv-device-id', DEVICE)
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+  })
+
+  it('recovery caído->conectado dispara flush de la cola', async () => {
+    await guardarEvento(evento('evt-hb-1'))
+    const rpc = vi.fn(async () => ({ insertado: true }))
+    // ping: primero caído, luego conectado (recovery).
+    const ping = vi.fn()
+    ping.mockResolvedValueOnce(false)
+    ping.mockResolvedValueOnce(true)
+    ping.mockResolvedValue(true)
+    const cleanup = iniciarAutoSync({ rpc, heartbeatMs: 10, ping })
+    // Tras el recovery del heartbeat, el evento pendiente se sincroniza.
+    await vi.waitFor(() => expect(rpc).toHaveBeenCalledTimes(1), { timeout: 3000 })
+    expect(await listarPendientes(DEVICE)).toHaveLength(0)
+    cleanup()
   })
 })
