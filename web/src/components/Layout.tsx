@@ -6,6 +6,7 @@ import { obtenerMiEmpresa, type Empresa } from '../lib/empresa'
 import { CommandPalette } from './CommandPalette'
 import { useUIStore } from '../lib/ui-store'
 import { useCajaStore } from '../store/useCajaStore'
+import { abrirCaja, cerrarCaja } from '../lib/caja'
 
 const navItems = [
   { to: '/', label: 'Venta', icon: 'point_of_sale' },
@@ -22,6 +23,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const theme = useUIStore((s) => s.theme)
   const toggleTheme = useUIStore((s) => s.toggleTheme)
   const resetZoom = useUIStore((s) => s.resetZoom)
+  const pendientes = useCajaStore((s) => s.pendientes)
+  const online = useCajaStore((s) => s.online)
+  const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
+  const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
 
   useEffect(() => {
     if (session) obtenerMiEmpresa().then(setEmpresa).catch(() => setEmpresa(null))
@@ -48,6 +53,21 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!confirm('¿Salir de la aplicación? Tendrás que volver a iniciar sesión.')) return
     await logout()
     navigate('/login')
+  }
+
+  // Abre/cierra la caja del dispositivo (REQ-1). Tras la acción, refresca el estado.
+  async function onToggleCaja() {
+    const s = useCajaStore.getState()
+    try {
+      if (s.cajaAbierta) {
+        if (s.sesionCajaId) await cerrarCaja(s.sesionCajaId)
+      } else {
+        await abrirCaja('0')
+      }
+      await s.refrescar()
+    } catch {
+      // La UI refleja el estado real al refrescar; no bloquea la navegación.
+    }
   }
 
   return (
@@ -84,6 +104,21 @@ export function Layout({ children }: { children: ReactNode }) {
             Buscar o navegar… <kbd>Ctrl K</kbd>
           </button>
           <div className="topbar-user">{session?.user?.email ?? ''}</div>
+          <div className="topbar-caja">
+            <span className={`estado-conexion ${online ? 'on' : 'off'}`} aria-label={online ? 'En línea' : 'Sin conexión'}>
+              {online ? 'En línea' : 'Offline'}
+            </span>
+            {pendientes > 0 && (
+              <span className="badge-pendientes" title="Ventas pendientes de sincronizar">
+                {pendientes} pendiente{pendientes === 1 ? '' : 's'}
+              </span>
+            )}
+            {cajaHabilitada && (
+              <button className="caja-btn" onClick={onToggleCaja}>
+                {cajaAbierta ? 'Cerrar caja' : 'Abrir caja'}
+              </button>
+            )}
+          </div>
           <button className="topbar-reset-zoom" onClick={resetZoom} aria-label="Restablecer zoom" title="Restablecer zoom (100%)">
             <span className="material-symbols-outlined">zoom_out_map</span>
           </button>
