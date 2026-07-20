@@ -5,6 +5,7 @@ import { logout } from '../lib/auth'
 import { obtenerMiEmpresa, type Empresa } from '../lib/empresa'
 import { CommandPalette } from './CommandPalette'
 import { useUIStore } from '../lib/ui-store'
+import { useCajaStore } from '../store/useCajaStore'
 
 const navItems = [
   { to: '/', label: 'Venta', icon: 'point_of_sale' },
@@ -25,6 +26,12 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (session) obtenerMiEmpresa().then(setEmpresa).catch(() => setEmpresa(null))
   }, [session])
+
+  // Refresca el estado de caja/online/pendientes al autenticarse (REQ-1/2/4).
+  const refrescarCaja = useCajaStore((s) => s.refrescar)
+  useEffect(() => {
+    if (session) void refrescarCaja()
+  }, [session, refrescarCaja])
 
   useEffect(() => {
       function onKey(e: KeyboardEvent) {

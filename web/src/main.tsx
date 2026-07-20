@@ -10,6 +10,8 @@ import { PosPage } from './pages/PosPage'
 import { CatalogoPage } from './pages/CatalogoPage'
 import { RequireAuth } from './components/RequireAuth'
 import { Layout } from './components/Layout'
+import { useCajaStore } from './store/useCajaStore'
+import { iniciarAutoSync } from './lib/autoSync'
 import '@fontsource/jetbrains-mono'
 import './index.css'
 
@@ -23,6 +25,17 @@ function Root() {
   useEffect(() => {
     document.documentElement.style.zoom = String(zoom)
   }, [zoom])
+  // Arranque único del auto-sync offline -> online (REQ-4). Refleja en el store.
+  useEffect(() => {
+    const stop = iniciarAutoSync({
+      onCambioEstado: (online, pendientes) => {
+        const s = useCajaStore.getState()
+        s.setOnline(online)
+        s.setPendientes(pendientes)
+      },
+    })
+    return stop
+  }, [])
   if (loading) return <p className="center">Cargando…</p>
   return (
     <Routes>
