@@ -286,6 +286,11 @@ export function getMockEmpresaId(): string | null {
   return state.companyId ?? null
 }
 
+export function getMockUsuarioId(): string | null {
+  const state = readState()
+  return state.session?.user?.id ?? null
+}
+
 export async function listarProductosMock(opts?: {
   search?: string
   categoriaId?: string | null

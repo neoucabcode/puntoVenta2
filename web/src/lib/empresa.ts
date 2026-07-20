@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { getMockEmpresa, getMockEmpresaId } from './mock-data'
+import { getMockEmpresa, getMockEmpresaId, getMockUsuarioId } from './mock-data'
 
 export type Empresa = {
   id: string
@@ -66,4 +66,14 @@ export async function obtenerMiEmpresaId(): Promise<string | null> {
 // no devolver el empresa_id de una sesión anterior (deuda técnica item 2).
 export function limpiarCacheEmpresa(): void {
   empresaIdCache = undefined
+}
+
+// ID del usuario autenticado (para firmar la venta offline). En modo mock
+// devuelve el usuario local; con Supabase devuelve el user.id (uuid real).
+export async function obtenerMiUsuarioId(): Promise<string | null> {
+  if (!supabase) {
+    return getMockUsuarioId()
+  }
+  const { data: auth } = await supabase.auth.getUser()
+  return auth.user?.id ?? null
 }
