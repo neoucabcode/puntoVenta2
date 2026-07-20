@@ -140,9 +140,17 @@ export async function crearProducto(input: ProductoInput): Promise<Producto> {
   if (!supabase) {
     return crearProductoMock(input) as Promise<Producto>
   }
+  // Aislamiento multi-tenant: el producto debe pertenecer a la empresa del
+  // usuario autenticado. La columna `empresa_id` es NOT NULL y la RLS
+  // `with check es_de_empresa` lo exige; sin esto el insert falla en runtime.
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) {
+    throw new Error('No se pudo determinar la empresa para crear el producto')
+  }
   const { data, error } = await supabase
     .from('producto')
     .insert({
+      empresa_id: empresaId,
       codigo_barras: input.codigo_barras ?? null,
       sku: input.sku ?? null,
       nombre: input.nombre,
@@ -218,9 +226,15 @@ export async function crearCategoria(nombre: string): Promise<Categoria> {
   if (!supabase) {
     return crearCategoriaMock(nombre)
   }
+  // Aislamiento multi-tenant: `empresa_id` es NOT NULL y la RLS lo exige en el
+  // insert de `categoria`. Sin esto el alta de categoría falla en runtime.
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) {
+    throw new Error('No se pudo determinar la empresa para crear la categoría')
+  }
   const { data, error } = await supabase
     .from('categoria')
-    .insert({ nombre })
+    .insert({ nombre, empresa_id: empresaId })
     .select('id,nombre')
     .single()
   if (error) throw error

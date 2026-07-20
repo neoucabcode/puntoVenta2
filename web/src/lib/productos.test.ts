@@ -1,18 +1,49 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { calcularValuacion, aplicarAjusteStock } from './productos'
+import {
+  calcularValuacion,
+  aplicarAjusteStock,
+  crearProducto,
+  crearCategoria,
+} from './productos'
 
-const h = vi.hoisted(() => ({ rpcArgs: null as Record<string, unknown> | null, rpcError: null as unknown }))
+const h = vi.hoisted(() => ({
+  rpcArgs: null as Record<string, unknown> | null,
+  rpcError: null as unknown,
+  // Estado del mock de `from(...).insert(...)`. Capturamos el argumento real
+  // del insert para garantizar cobertura del camino multi-tenant (los mocks
+  // ciegos previos ocultaron el bug de empresa_id ausente).
+  insertTable: null as string | null,
+  insertArgs: null as Record<string, unknown> | null,
+  insertError: null as unknown,
+  // Empresa resuelta por el mock de ./empresa (mutable para test de nulo).
+  empresaId: 'emp-x' as string | null,
+}))
 
 vi.mock('../lib/supabase', () => {
   const rpc = vi.fn((_name: string, args: Record<string, unknown>) => {
     h.rpcArgs = args
     return Promise.resolve({ error: h.rpcError })
   })
-  return { supabase: { rpc } }
+  const single = vi.fn(() =>
+    Promise.resolve({
+      data: { ...(h.insertArgs ?? {}), id: 'new-id', nombre: 'cat' },
+      error: h.insertError,
+    })
+  )
+  const select = vi.fn(() => ({ single }))
+  const insert = vi.fn((args: Record<string, unknown>) => {
+    h.insertArgs = args
+    return { select }
+  })
+  const from = vi.fn((table: string) => {
+    h.insertTable = table
+    return { insert }
+  })
+  return { supabase: { rpc, from } }
 })
 
 vi.mock('../lib/empresa', () => ({
-  obtenerMiEmpresaId: async () => 'emp-x',
+  obtenerMiEmpresaId: async () => h.empresaId,
   obtenerMiUsuarioId: async () => 'usr-x',
 }))
 
@@ -55,5 +86,63 @@ describe('aplicarAjusteStock (RPC aplicar_ajuste_stock)', () => {
     await expect(
       aplicarAjusteStock({ productoId: 'p3', cantidad: 1, motivo: 'otro' })
     ).rejects.toBeTruthy()
+  })
+})
+
+describe('crearProducto (aislamiento multi-tenant)', () => {
+  beforeEach(() => {
+    h.insertTable = null
+    h.insertArgs = null
+    h.insertError = null
+    h.empresaId = 'emp-x'
+  })
+
+  it('inserta en "producto" con empresa_id definido y no vacío', async () => {
+    const prod = await crearProducto({ nombre: 'Tornillo', unidad: 'unidad' })
+    expect(h.insertTable).toBe('producto')
+    expect(h.insertArgs).toBeTruthy()
+    const empresaId = (h.insertArgs as Record<string, unknown>).empresa_id
+    expect(empresaId).toBe('emp-x')
+    expect(empresaId).toBeTruthy()
+    expect(typeof empresaId).toBe('string')
+    // El alta exitosa devuelve el registro insertado.
+    expect(prod.id).toBe('new-id')
+  })
+
+  it('lanza y NO inserta si no hay empresa_id', async () => {
+    h.empresaId = null
+    h.insertArgs = null
+    await expect(
+      crearProducto({ nombre: 'Sin empresa', unidad: 'unidad' })
+    ).rejects.toThrow(/empresa/i)
+    // No se debe haber llamado al insert (falló antes por validación).
+    expect(h.insertArgs).toBeNull()
+  })
+})
+
+describe('crearCategoria (aislamiento multi-tenant)', () => {
+  beforeEach(() => {
+    h.insertTable = null
+    h.insertArgs = null
+    h.insertError = null
+    h.empresaId = 'emp-x'
+  })
+
+  it('inserta en "categoria" con empresa_id definido y no vacío', async () => {
+    const cat = await crearCategoria('Herramientas')
+    expect(h.insertTable).toBe('categoria')
+    expect(h.insertArgs).toBeTruthy()
+    const empresaId = (h.insertArgs as Record<string, unknown>).empresa_id
+    expect(empresaId).toBe('emp-x')
+    expect(empresaId).toBeTruthy()
+    expect(typeof empresaId).toBe('string')
+    expect(cat.id).toBe('new-id')
+  })
+
+  it('lanza y NO inserta si no hay empresa_id', async () => {
+    h.empresaId = null
+    h.insertArgs = null
+    await expect(crearCategoria('Sin empresa')).rejects.toThrow(/empresa/i)
+    expect(h.insertArgs).toBeNull()
   })
 })
