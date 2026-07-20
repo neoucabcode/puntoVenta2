@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { obtenerMiEmpresaId } from './empresa'
+import { obtenerMiEmpresaId, obtenerMiUsuarioId } from './empresa'
 import {
   listarProductosMock,
   listarCategoriasMock,
@@ -281,4 +281,60 @@ export async function verificarCodigoDuplicado(
   const { data, error } = await q
   if (error) throw error
   return (data ?? []).length > 0
+}
+
+// Valuación total del inventario = Σ(costo × stock) del tenant.
+export function calcularValuacion(
+  productos: Array<{ costo_usd: number; stock_actual: number }>
+): number {
+  return productos.reduce((acc, p) => acc + (p.costo_usd * p.stock_actual), 0)
+}
+
+// Mapea el motivo legible del ajuste al `tipo` de `movimiento_inventario`.
+function mapearMotivoATipo(motivo: string): string {
+  if (motivo === 'merma') return 'merma'
+  if (motivo === 'devolución') return 'devolucion'
+  return 'ajuste'
+}
+
+export type AjusteStockInput = {
+  productoId: string
+  /** Positivo para ingreso, negativo para egreso. Respeta RN-55 (stock negativo si la empresa lo permite). */
+  cantidad: number
+  /** Motivo legible: 'conteo físico' | 'merma' | 'devolución' | 'otro'. */
+  motivo: string
+  /** Idempotencia: si se reintenta el mismo ajuste, usar el mismo id_evento. */
+  idEvento?: string
+}
+
+/**
+ * Ajuste de stock con motivo y auditoría (RN-11). Inserta un
+ * `movimiento_inventario` y actualiza `stock_actual` vía RPC `aplicar_ajuste_stock`
+ * (security invoker). El `cantidad` se envía como número (no string) para evitar
+ * el mismatch cliente↔servidor de la deuda técnica de numeric.
+ */
+export async function aplicarAjusteStock(input: AjusteStockInput): Promise<void> {
+  if (!supabase) {
+    throw new Error('El ajuste de stock requiere conexión con la base de datos')
+  }
+  const empresaId = await obtenerMiEmpresaId()
+  const usuarioId = await obtenerMiUsuarioId()
+  if (!empresaId || !usuarioId) {
+    throw new Error('No se pudo determinar la empresa o el usuario para el ajuste')
+  }
+  const idEvento =
+    input.idEvento ??
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `ajuste-${Date.now()}-${Math.random()}`)
+  const { error } = await supabase.rpc('aplicar_ajuste_stock', {
+    p_id_evento: idEvento,
+    p_empresa_id: empresaId,
+    p_producto_id: input.productoId,
+    p_cantidad: input.cantidad,
+    p_tipo: mapearMotivoATipo(input.motivo),
+    p_motivo: input.motivo,
+    p_usuario_id: usuarioId,
+  })
+  if (error) throw error
 }
