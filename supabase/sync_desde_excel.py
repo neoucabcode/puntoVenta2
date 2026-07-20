@@ -46,7 +46,7 @@ except ImportError:
     sys.exit("Falta openpyxl: pip install openpyxl")
 
 # ---- Config ----
-EXCEL = r"G:\Mi unidad\catalogo_inicial.xlsx"
+EXCEL = r"G:\Mi unidad\puntoVenta2Tabla\catalogo_inicial.xlsx"
 HOJA = "Productos"
 TABLA = "TablaProductos"
 IMG_DIR = r"G:\Mi unidad\puntoVenta2Tabla\imagenes"
@@ -210,7 +210,9 @@ def main():
 
         with open(archivo, "rb") as fh:
             data = fh.read()
-        dest = f"{empresa_id}/{pid}.webp"
+        # Convencion actual: imagenes en la RAIZ del bucket (productos/{sku}.webp),
+        # igual que el seed original y que las imagen_url existentes.
+        dest = f"{f['sku']}.webp"
         _safe(supabase.storage.from_(BUCKET).upload(dest, data, {"content-type": "image/webp", "upsert": "true"}))
         public_url = f"{URL}/storage/v1/object/public/{BUCKET}/{dest}"
         _safe(supabase.table("producto").update({"imagen_url": public_url}).eq("id", pid).execute())
