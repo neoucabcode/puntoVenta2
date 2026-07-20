@@ -123,21 +123,21 @@ Chain strategy: stacked-to-main
 
 <!-- slice: 2 -->
 
-- [ ] **T2.1** `Carrito.tsx` limpio
+- [x] **T2.1** `Carrito.tsx` limpio
   - Desc: nuevo `web/src/components/Carrito.tsx` (ítem, cantidad editable, precio unit, subtotal, total, estado vacío) consumiendo store existente en modo lectura.
   - Archivos: Crear `web/src/components/Carrito.tsx`.
   - Dep: ninguna.
   - AC: 3 líneas muestran desc/cant/subtotal/total; vacío claro. (spec: pos-fina-ux / Carrito múltiples ítems, Carrito vacío)
   - Est: ~120 loc.
 
-- [ ] **T2.2** Refresh `PosPage` (tasa + métodos)
+- [x] **T2.2** Refresh `PosPage` (tasa + métodos)
   - Desc: integrar `Carrito`; mostrar "1 USD = X Bs" con badge "puede estar desactualizada" si >24h (propuesta design); métodos como chips seleccionables (Efectivo Bs, Efectivo USD, Transferencia). No modificar `useCajaStore`/cola/autoSync.
   - Archivos: Modificar `web/src/pages/PosPage.tsx` + CSS.
   - Dep: T2.1.
   - AC: tasa visible; tasa offline >24h marcada; método registrado y monto convertido. (spec: pos-fina-ux / Tasa visible, Tasa desactualizada, Métodos claros, Refresh sin regresión de cola)
   - Est: ~120 loc.
 
-- [ ] **T2.3** Tests regresión offline Slice 2
+- [x] **T2.3** Tests regresión offline Slice 2
   - Desc: reusa patrón `caja.test.ts`; venta offline produce evento idéntico en `ventas_pendientes`; badge tasa desactualizada; método registrado. No borrar tests de `modo-caja-offline`.
   - Archivos: Crear `web/src/**/__tests__/slice2*.test.ts`.
   - Dep: T2.1, T2.2.
