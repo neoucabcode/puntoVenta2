@@ -7,11 +7,13 @@ import { CommandPalette } from './CommandPalette'
 import { useUIStore } from '../lib/ui-store'
 import { useCajaStore } from '../store/useCajaStore'
 import { abrirCaja, cerrarCaja } from '../lib/caja'
+import { useUsuarioRol } from '../hooks/useUsuarioRol'
 
 const navItems = [
-  { to: '/', label: 'Venta', icon: 'point_of_sale' },
-  { to: '/catalogo', label: 'Catálogo', icon: 'inventory_2' },
-]
+  { to: '/', label: 'Venta', icon: 'point_of_sale', adminOnly: false },
+  { to: '/catalogo', label: 'Catálogo', icon: 'inventory_2', adminOnly: false },
+  { to: '/inventario', label: 'Inventario', icon: 'inventory', adminOnly: true },
+] as const
 
 export function Layout({ children }: { children: ReactNode }) {
   const { session } = useAuth()
@@ -27,6 +29,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const online = useCajaStore((s) => s.online)
   const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
+  const { inventarioHabilitado } = useUsuarioRol()
+  const items = navItems.filter((i) => !i.adminOnly || inventarioHabilitado)
 
   useEffect(() => {
     if (session) obtenerMiEmpresa().then(setEmpresa).catch(() => setEmpresa(null))
@@ -82,7 +86,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="brand-name">{empresa?.nombre ?? 'FerrehogarMart'}</span>
         </div>
         <nav className="side-nav">
-          {navItems.map((item) => (
+          {items.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'} className="side-link">
               <span className="side-ico material-symbols-outlined">{item.icon}</span>
               <span className="side-label">{item.label}</span>
