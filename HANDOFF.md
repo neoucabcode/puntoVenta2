@@ -79,9 +79,10 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - **Auto-sync silencioso (REQ-4):** `web/src/lib/autoSync.ts` detecta offline→online + heartbeat y sube
   la cola vía RPC `aplicar_venta_offline` (upsert por PK, `security invoker`); reintenta con backoff
   exponencial y **no duplica**. Estado en `web/src/store/useCajaStore.ts`; badge de pendientes en `Layout.tsx`.
-- **Catálogo solo-lectura (REQ-2):** `CatalogoPage`/`PosPage` ocultan Crear/Editar/Borrar/Vender si hay
-  caja habilitada y no está abierta. `web/src/lib/cacheCatalogo.ts` sirve el catálogo desde caché
-  IndexedDB cuando no hay red.
+- **Catálogo solo-lectura (REQ-2) — SUPERADO por rediseño 2026-07-20:** en el cambio `rediseno-ui-caja-inventario`,
+  `CatalogoPage` es **permanentemente solo lectura** (sin Crear/Editar/Borrar/Vender, sin depender del estado de
+  caja). La edición de productos vive en la nueva página `/inventario` (admin-gated, estilo Fina). `web/src/lib/cacheCatalogo.ts`
+  sigue sirviendo el catálogo desde caché IndexedDB sin red.
 - **Stock = auditoría:** la venta offline registra `movimiento_stock` causa `venta_offline` (RN-11) y
   **nunca bloquea** la venta (RN-54/55).
 
@@ -97,13 +98,50 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
   2ª, y **1 sola fila** en `venta_offline_event`. Si difiere, es bug de SQL y se reporta antes de producción.
 
 ### Verificación y ramas
-- `web/` → `npm test`: **18/18 pass** (Vitest + happy-dom + fake-indexeddb). `npm run build`: exit 0.
+- `web/` → `npm test`: **56/56 pass** (Vitest + happy-dom + fake-indexeddb + RTL). `npm run build`: exit 0.
+  (Subió 18→44 en Slice 1 y 44→56 en Slice 2 del cambio `rediseno-ui-caja-inventario`.)
 - Ramas (sin push, stacked): `modo-caja-offline/1-foundacion` → `2-libs` → `3-ui` → `4-fixes`.
   El orchestrator decidirá push/PR.
 
 ### Relación con la deuda técnica
 - V1 **no** corrige la fuga Storage multi-tenant, `confirm()` nativo ni paginación falsa (fuera de scope).
 - La caché de catálogo offline lee imágenes por `imagen_url` (Supabase Storage); no cambia la política de Storage.
+
+## Rediseño UI estilo Fina (2026-07-20)
+
+> **Cambio SDD `rediseno-ui-caja-inventario`** — separar edición de productos de la caja y rediseñar la UI
+> "estilo Fina" (fidelidad alta, no maquillaje). Proposal/specs/design/tasks en
+> `openspec/changes/rediseno-ui-caja-inventario/`. Faseado en 6 slices (16 PRs <400 líneas).
+
+### Decisiones del usuario
+- Nav de 3: Venta (caja) · Catálogo (solo lectura) · Inventario (edición, nueva).
+- Catálogo 100% solo lectura (sin editar ni vender).
+- Inventario estilo Fina: CRUD + categorías + ajuste de stock (RN-11) + alerta bajo stock + valuación, **solo admin**
+  (rol en `usuario`).
+- Caja estilo Fina COMPLETA menos cajón: UX carrito/tasa/métodos, pagos combinados, cliente→cxc, devoluciones,
+  presupuestos, hardware (lector+impresora). Offline multi-dispositivo PRESERVADO siempre.
+
+### Progreso
+- **Slice 1 (MVP separación UI):** DONE + VERIFY PASS. Nav 3, CatalogoPage read-only, InventarioPage admin-gated
+  (CRUD+categorías+ajuste stock+valuación+alerta), gate rol (`obtenerMiRol`+`useUsuarioRol`). Corregido CRITICAL
+  C1/C2 (empresa_id en `crearProducto`/`crearCategoria`). Rama `rediseno-ui/1-ui-sep`.
+- **Slice 2 (Caja UX Fina):** DONE (apply; verify del slice pendiente de correr). `Carrito.tsx` estilo Fina,
+  tasa Bs/$ visible + stale 24h, métodos De contado/A crédito, selector cliente, Total USD+Bs. Offline intacto.
+  Rama `rediseno-ui/2-caja-ux`.
+- **Slices 3-6:** PENDIENTES (pagos combinados+cliente+cxc / devoluciones / presupuestos / hardware).
+
+### ⚠️ Pendiente del usuario (no es bug)
+- **W1:** aplicar `supabase/patch_09_inventario.sql` (RPC `aplicar_ajuste_stock` + columna `empresa.logo_url`).
+  Hasta entonces el ajuste de stock falla en runtime.
+- **W2:** `UPDATE usuario SET rol = 'admin' WHERE id = '<tu_user_id>'` para que Inventario funcione en producción
+  (en dev el gate tiene fallback rol null→admin con warning).
+
+### SQL
+- `patch_08` (sesion_caja, aplicar_venta_offline) sigue aplicado en BD; ojo: NO está en `supabase/` del repo.
+- `patch_09_inventario.sql` creado en repo, PENDIENTE de aplicar por el usuario.
+
+### Ramas (sin push, stacked-to-main)
+- `rediseno-ui/1-ui-sep` (Slice 1) → `rediseno-ui/2-caja-ux` (Slice 2). El orchestrator decidirá push/PR.
 
 ## Deuda técnica real (auditoría 2026-07-19, vigente)
 - 🔴 **Fuga de Storage multi-tenant** — `schema_fase2.sql` (`productos_public_read`) expone objetos
