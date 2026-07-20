@@ -30,14 +30,19 @@ export async function obtenerMiEmpresa(): Promise<Empresa | null> {
   if (!supabase) {
     return getMockEmpresa()
   }
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) return null
-  const { data } = await supabase
-    .from('usuario')
-    .select('empresa:id(id, nombre, tasa_activa, igtf_habilitado, caja_obligatoria, venta_sin_stock, stock_negativo)')
-    .eq('id', auth.user.id)
+  // Reusa obtenerMiEmpresaId() (select plano de 'empresa_id' que ya funciona) y
+  // consulta 'empresa' directo por id. El select embebido
+  // usuario.empresa:id(...) devolvía data.empresa = null en PostgREST, rompiendo
+  // el vínculo y ocultando el botón "Abrir caja".
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) return null
+  const { data, error } = await supabase
+    .from('empresa')
+    .select('id, nombre, tasa_activa, igtf_habilitado, caja_obligatoria, venta_sin_stock, stock_negativo')
+    .eq('id', empresaId)
     .single()
-  return (data?.empresa as unknown as Empresa) ?? null
+  if (error) return null
+  return (data as Empresa) ?? null
 }
 
 // Cache de empresa_id para no consultarlo en cada búsqueda paginada.
