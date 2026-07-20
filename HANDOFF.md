@@ -140,8 +140,9 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - `patch_08` (sesion_caja, aplicar_venta_offline) sigue aplicado en BD; ojo: NO está en `supabase/` del repo.
 - `patch_09_inventario.sql` creado en repo, PENDIENTE de aplicar por el usuario.
 
-### Ramas (sin push, stacked-to-main)
-- `rediseno-ui/1-ui-sep` (Slice 1) → `rediseno-ui/2-caja-ux` (Slice 2). El orchestrator decidirá push/PR.
+### Ramas (PUSHEADAS a origin, tracking `master`, stacked-to-main)
+- `rediseno-ui/1-ui-sep` (Slice 1) → `rediseno-ui/2-caja-ux` (Slice 2). PRs target `master`.
+- ⚠️ Usuario tiene dudas abiertas sobre el rediseño (a clarificar la próxima sesión).
 
 ## Deuda técnica real (auditoría 2026-07-19, vigente)
 - 🔴 **Fuga de Storage multi-tenant** — `schema_fase2.sql` (`productos_public_read`) expone objetos
