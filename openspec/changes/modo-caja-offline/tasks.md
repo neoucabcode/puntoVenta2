@@ -83,9 +83,9 @@ Chain strategy: pending
 
 ## Phase 6: Verificación final
 
-- [ ] 6.1 Correr `npm test` en `web/` → todos verdes.
-- [ ] 6.2 Correr `npm run build` (tsc -b + vite build) → sin errores de tipo.
-- [ ] 6.3 Reportar salida de ambos comandos en el cambio SDD.
+- [x] 6.1 Correr `npm test` en `web/` → todos verdes.
+- [x] 6.2 Correr `npm run build` (tsc -b + vite build) → sin errores de tipo.
+- [x] 6.3 Reportar salida de ambos comandos en el cambio SDD.
 
 **Archivos**: n/a (verificación).
 **Dependencias**: 4.x, 5.x.
