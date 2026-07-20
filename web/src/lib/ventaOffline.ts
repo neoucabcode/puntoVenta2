@@ -32,12 +32,16 @@ export async function registrarVentaOffline(
   const precioUnit = Number(p.precio_usd) || 0
   const subtotal = (precioUnit * cant).toFixed(2)
 
+  // W4: si no hay uuid de usuario (modo 100% offline sin login previo) NO
+  // encolamos un evento que el RPC rechazará en silencio (''::uuid). Lo
+  // marcamos 'sync_error' con mensaje claro y lo dejamos para atención manual.
+  const sinUsuario = !usuarioId
   const evento: cola.EventoVentaOffline = {
     id_evento: idEvento,
     empresa_id: empresaId,
     dispositivo: getDeviceId(),
     sesion_caja_id: sesionCajaId,
-    estado_sync: 'pendiente',
+    estado_sync: sinUsuario ? 'sync_error' : 'pendiente',
     payload: {
       usuario_id: usuarioId ?? '',
       subtotal_usd: subtotal,
@@ -68,10 +72,13 @@ export async function registrarVentaOffline(
     ],
     intentos: 0,
     creado_en: new Date().toISOString(),
+    mensaje_error: sinUsuario
+      ? 'Sin usuario autenticado (uuid) para firmar la venta offline; la venta no se sincronizará hasta iniciar sesión.'
+      : undefined,
   }
 
   await cola.guardarEvento(evento)
-  const pend = await cola.listarPendientes(getDeviceId())
-  useCajaStore.getState().setPendientes(pend.length)
+  const pend = await cola.contarPendientes(getDeviceId())
+  useCajaStore.getState().setPendientes(pend)
   return idEvento
 }

@@ -22,6 +22,9 @@ export interface EventoVentaOffline {
   auditoria_stock: unknown
   intentos: number
   creado_en: string
+  // Motivo cuando estado_sync='sync_error' (p.ej. falta de usuario_id). Solo
+  // lectura/informe; no se envía al servidor (W4).
+  mensaje_error?: string
 }
 
 const DB_NAME = 'pv-caja'
@@ -135,4 +138,47 @@ export async function eliminarEvento(id: string): Promise<void> {
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
   })
+}
+
+// Devuelve un evento por su id_evento (para inspección/tests).
+export async function obtenerEvento(id: string): Promise<EventoVentaOffline | undefined> {
+  const db = await abrirDB()
+  return new Promise((resolve, reject) => {
+    const req = store(db, 'readonly').get(id)
+    req.onsuccess = () => resolve(req.result as EventoVentaOffline | undefined)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+// Lista eventos en estado 'sync_error' de un dispositivo (no se reintentan;
+// requieren intervención, p.ej. usuario_id ausente — W4).
+export async function listarSyncError(dispositivo: string): Promise<EventoVentaOffline[]> {
+  const db = await abrirDB()
+  return new Promise((resolve, reject) => {
+    const idx = store(db, 'readonly').index('estado_sync')
+    const range = IDBKeyRange.only('sync_error')
+    const out: EventoVentaOffline[] = []
+    const cursorReq = idx.openCursor(range)
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result
+      if (cursor) {
+        const val = cursor.value as EventoVentaOffline
+        if (val.dispositivo === dispositivo) out.push(val)
+        cursor.continue()
+      } else {
+        resolve(out)
+      }
+    }
+    cursorReq.onerror = () => reject(cursorReq.error)
+  })
+}
+
+// Cuenta lo que el usuario debe ver en el badge: pendientes + errores de sync
+// (los 'sync_error' también son pendientes de atención, W4).
+export async function contarPendientes(dispositivo: string): Promise<number> {
+  const [pend, err] = await Promise.all([
+    listarPendientes(dispositivo),
+    listarSyncError(dispositivo),
+  ])
+  return pend.length + err.length
 }

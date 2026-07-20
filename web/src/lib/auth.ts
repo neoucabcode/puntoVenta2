@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { limpiarCacheEmpresa } from '../lib/empresa'
+import { limpiarCacheEmpresa, setUsuarioIdCache, limpiarCacheUsuario } from '../lib/empresa'
 import type { User } from '@supabase/supabase-js'
 import {
   loginMock,
@@ -10,10 +10,13 @@ import {
 
 export async function login(email: string, password: string): Promise<User> {
   if (!supabase) {
-    return loginMock(email, password)
+    const user = await loginMock(email, password)
+    setUsuarioIdCache(user.id) // cachear uuid para firmar ventas offline (W4)
+    return user
   }
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
+  setUsuarioIdCache(data.user.id)
   return data.user
 }
 
@@ -23,7 +26,9 @@ export async function registro(
   nombre: string
 ): Promise<User> {
   if (!supabase) {
-    return registroMock(email, password, nombre)
+    const user = await registroMock(email, password, nombre)
+    setUsuarioIdCache(user.id)
+    return user
   }
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -32,6 +37,7 @@ export async function registro(
   })
   if (error) throw error
   if (!data.user) throw new Error('No se creó el usuario')
+  setUsuarioIdCache(data.user.id)
   return data.user
 }
 
@@ -54,6 +60,7 @@ export async function crearEmpresaConAdmin(
 
 export async function logout(): Promise<void> {
   limpiarCacheEmpresa()
+  limpiarCacheUsuario()
   if (!supabase) {
     await logoutMock()
     return

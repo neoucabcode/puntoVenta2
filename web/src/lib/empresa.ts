@@ -68,12 +68,43 @@ export function limpiarCacheEmpresa(): void {
   empresaIdCache = undefined
 }
 
-// ID del usuario autenticado (para firmar la venta offline). En modo mock
-// devuelve el usuario local; con Supabase devuelve el user.id (uuid real).
+// Cache local del uuid del usuario autenticado (firmado de ventas offline).
+// Se persiste en localStorage para sobrevivir recargas en modo 100% offline:
+// así la venta offline puede llevar usuario_id aunque no haya sesión activa
+// en memoria. Mitiga W4 (usuario_id '' rompía el RPC aplicar_venta_offline).
+const USUARIO_KEY = 'pv-uid'
+let usuarioIdCache: string | null | undefined =
+  typeof localStorage !== 'undefined'
+    ? (localStorage.getItem(USUARIO_KEY) ?? undefined)
+    : undefined
+
+// Fija el uuid del usuario (llamar al iniciar sesión, en login/registro).
+export function setUsuarioIdCache(id: string | null): void {
+  usuarioIdCache = id
+  if (typeof localStorage === 'undefined') return
+  if (id) localStorage.setItem(USUARIO_KEY, id)
+  else localStorage.removeItem(USUARIO_KEY)
+}
+
+// Limpia el uuid en logout/cambio de cuenta.
+export function limpiarCacheUsuario(): void {
+  usuarioIdCache = undefined
+  if (typeof localStorage !== 'undefined') localStorage.removeItem(USUARIO_KEY)
+}
+
+// ID del usuario autenticado (para firmar la venta offline). Devuelve primero
+// el uuid cacheado localmente (sobrevive a recargas offline); si no está
+// cacheado, lo resuelve de la sesión (mock o Supabase) y lo cachea.
 export async function obtenerMiUsuarioId(): Promise<string | null> {
+  if (usuarioIdCache !== undefined) return usuarioIdCache
+  let id: string | null
   if (!supabase) {
-    return getMockUsuarioId()
+    id = getMockUsuarioId()
+  } else {
+    const { data: auth } = await supabase.auth.getUser()
+    id = auth.user?.id ?? null
   }
-  const { data: auth } = await supabase.auth.getUser()
-  return auth.user?.id ?? null
+  usuarioIdCache = id
+  if (typeof localStorage !== 'undefined' && id) localStorage.setItem(USUARIO_KEY, id)
+  return id
 }

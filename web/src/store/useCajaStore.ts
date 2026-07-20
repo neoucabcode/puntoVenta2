@@ -46,7 +46,7 @@ export const useCajaStore = create<CajaState>()(
           if (!habilitada) {
             // RN-53: caja deshabilitada -> se vende sin caja (modo abierto).
             set({ cajaAbierta: true, sesionCajaId: null })
-            const pend = (await cola.listarPendientes(dispositivo)).length
+            const pend = await cola.contarPendientes(dispositivo)
             set({ pendientes: pend })
             return
           }
@@ -56,7 +56,7 @@ export const useCajaStore = create<CajaState>()(
           } else {
             set({ cajaAbierta: false, sesionCajaId: null })
           }
-          const pend = (await cola.listarPendientes(dispositivo)).length
+          const pend = await cola.contarPendientes(dispositivo)
           set({ pendientes: pend })
         } catch {
           // offline-safe: mantener valores por defecto, no romper la UI.
