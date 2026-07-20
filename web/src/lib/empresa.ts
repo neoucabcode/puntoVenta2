@@ -73,6 +73,23 @@ export function limpiarCacheEmpresa(): void {
   empresaIdCache = undefined
 }
 
+// Rol del usuario autenticado (gate de Inventario). Lee `usuario.rol`, que en
+// el esquema es un enum ('cajero'|'inventario'|'admin'|'auditor'). Devuelve
+// `null` si no hay sesión o no se puede resolver (así el llamador aplica su
+// propio fallback de acceso).
+export async function obtenerMiRol(): Promise<string | null> {
+  if (!supabase) return null
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return null
+  const { data, error } = await supabase
+    .from('usuario')
+    .select('rol')
+    .eq('id', auth.user.id)
+    .single()
+  if (error) return null
+  return (data?.rol as string | null) ?? null
+}
+
 // Cache local del uuid del usuario autenticado (firmado de ventas offline).
 // Se persiste en localStorage para sobrevivir recargas en modo 100% offline:
 // así la venta offline puede llevar usuario_id aunque no haya sesión activa
