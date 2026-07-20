@@ -9,6 +9,7 @@ import {
   type ProductoJoin,
   type Categoria,
 } from '../lib/productos'
+import { obtenerCatalogo } from '../lib/cacheCatalogo'
 import { importarCatalogoMock } from '../lib/mock-data'
 import { ProductoForm } from '../components/ProductoForm'
 import { DataTable } from '../components/DataTable'
@@ -25,6 +26,7 @@ export function CatalogoPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState('')
+  const [usandoCache, setUsandoCache] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
@@ -57,13 +59,19 @@ export function CatalogoPage() {
       setError('')
       try {
         const offset = reset ? 0 : offsetRef.current
-        const res = await listarProductos({
-          search,
-          categoriaId: categoriaFiltro || null,
-          soloActivos,
-          offset,
-          pageSize: PAGE_SIZE,
-        })
+        // W1: usa la caché local cuando está offline o falla Supabase; marca
+        // `desdeCache` para mostrar el indicador de catálogo sin conexión.
+        const res = await obtenerCatalogo(
+          () =>
+            listarProductos({
+              search,
+              categoriaId: categoriaFiltro || null,
+              soloActivos,
+              offset,
+              pageSize: PAGE_SIZE,
+            }),
+          { guardarEnCache: reset }
+        )
         if (reset) {
           setProductos(res.items)
           offsetRef.current = res.items.length
@@ -72,8 +80,10 @@ export function CatalogoPage() {
           offsetRef.current += res.items.length
         }
         setHasMore(res.hasMore)
+        setUsandoCache(res.desdeCache)
       } catch (err) {
         setError((err as Error).message)
+        setUsandoCache(false)
       } finally {
         cargandoRef.current = false
         if (reset) {
@@ -287,11 +297,14 @@ export function CatalogoPage() {
       <div className="catalogo-body">
         <main className="catalogo-main">
            {error && <p className="error">{error}</p>}
+           {usandoCache && (
+              <p className="aviso-cache">catálogo sin conexión (cached)</p>
+            )}
            {msgVenta && (
-             <p style={{ fontWeight: 600, color: msgVenta.startsWith('Error') ? '#dc2626' : '#16a34a' }}>
-               {msgVenta}
-             </p>
-           )}
+              <p style={{ fontWeight: 600, color: msgVenta.startsWith('Error') ? '#dc2626' : '#16a34a' }}>
+                {msgVenta}
+              </p>
+            )}
 
           {loading ? (
             <p>Cargando…</p>

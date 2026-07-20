@@ -214,6 +214,7 @@ button { font-family: var(--font); }
 .card a { color: var(--accent); text-align: center; font-size: 0.85rem; }
 .error { color: #fca5a5; font-size: 0.85rem; margin: 0; }
 .ok { color: var(--ok); font-size: 0.85rem; margin: 0; }
+.aviso-cache { color: #fcd34d; font-size: 0.85rem; margin: 0; font-weight: 600; }
 
 /* ---------- Catálogo toolbar ---------- */
 .catalogo-toolbar {
