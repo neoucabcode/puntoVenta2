@@ -40,9 +40,9 @@ Chain strategy: pending
 
 ## Phase 2: Núcleo — módulos offline
 
-- [ ] 2.1 Crear `web/src/lib/colaOffline.ts`: interfaz `EventoVentaOffline` (`id_evento`, `empresa_id`, `dispositivo`, `sesion_caja_id?`, `estado_sync`, `payload`, `auditoria_stock`, `intentos`, `creado_en`); función `abrirDB()` (IndexedDB `pv-caja`, store `ventas_pendientes`, keyPath `id_evento`, índice `estado_sync`); API `guardarEvento(e)` (idempotente: put), `listarPendientes(dispositivo)`, `marcarSyncOk(id)`, `incrementarIntento(id)`, `eliminarEvento(id)`. numeric→string.
-- [ ] 2.2 Crear `web/src/lib/caja.ts`: `getDeviceId()` (crypto.randomUUID persistido en localStorage `pv-device-id`); `abrirCaja(saldoInicial:string):Promise<sesion_caja|null>` (insert `sesion_caja` estado `abierta`; si no hay cliente Supabase o caja deshabilitada → devuelve `null`, RN-53); `cerrarCaja(id):Promise<void>`; `hayCajaAbierta(dispositivo):Promise<boolean>`; `obtenerCajaActual(dispositivo):Promise<sesion_caja|null>`.
-- [ ] 2.3 Crear `web/src/lib/autoSync.ts`: `estaOnline():boolean`; `iniciarAutoSync(handlers)` suscribe `window` eventos `online`/`offline` + `navigator.onLine`; `sincronizarPendientes()` lee cola, llama RPC `aplicar_venta_offline` por evento, en éxito `marcarSyncOk`, en fallo `incrementarIntento` (backoff exponencial); callback `onCambioEstado(online, pendientes)`. Degrada si `supabase` es `null`.
+- [x] 2.1 Crear `web/src/lib/colaOffline.ts`: interfaz `EventoVentaOffline` (`id_evento`, `empresa_id`, `dispositivo`, `sesion_caja_id?`, `estado_sync`, `payload`, `auditoria_stock`, `intentos`, `creado_en`); función `abrirDB()` (IndexedDB `pv-caja`, store `ventas_pendientes`, keyPath `id_evento`, índice `estado_sync`); API `guardarEvento(e)` (idempotente: put), `listarPendientes(dispositivo)`, `marcarSyncOk(id)`, `incrementarIntento(id)`, `eliminarEvento(id)`. numeric→string.
+- [x] 2.2 Crear `web/src/lib/caja.ts`: `getDeviceId()` (crypto.randomUUID persistido en localStorage `pv-device-id`); `abrirCaja(saldoInicial:string):Promise<sesion_caja|null>` (insert `sesion_caja` estado `abierta`; si no hay cliente Supabase o caja deshabilitada → devuelve `null`, RN-53); `cerrarCaja(id):Promise<void>`; `hayCajaAbierta(dispositivo):Promise<boolean>`; `obtenerCajaActual(dispositivo):Promise<sesion_caja|null>`.
+- [x] 2.3 Crear `web/src/lib/autoSync.ts`: `estaOnline():boolean`; `iniciarAutoSync(handlers)` suscribe `window` eventos `online`/`offline` + `navigator.onLine`; `sincronizarPendientes()` lee cola, llama RPC `aplicar_venta_offline` por evento, en éxito `marcarSyncOk`, en fallo `incrementarIntento` (backoff exponencial); callback `onCambioEstado(online, pendientes)`. Degrada si `supabase` es `null`.
 
 **Archivos**: `web/src/lib/colaOffline.ts`, `web/src/lib/caja.ts`, `web/src/lib/autoSync.ts`.
 **Dependencias**: 1.1, 1.2 (Vitest), 1.3 (tablas en Supabase).
@@ -51,8 +51,8 @@ Chain strategy: pending
 
 ## Phase 3: Store + Integración de estado
 
-- [ ] 3.1 Crear `web/src/store/useCajaStore.ts` (Zustand 4): estado `cajaAbierta:boolean`, `sesionCajaId:string|null`, `online:boolean`, `pendientes:number`; acciones `setCajaAbierta`, `setOnline`, `setPendientes`, `refrescar()`. Persistir `cajaAbierta`+`sesionCajaId` (no los eventos). Cablear con `caja.ts` (init `hayCajaAbierta`) y `autoSync` (handlers de `onCambioEstado` y `sincronizarPendientes`).
-- [ ] 3.2 Arranque: en `main.tsx` o `Layout`, llamar `refrescar()` + `iniciarAutoSync(...)` una vez para poblar `online`/`pendientes` y disparar sync al reconectar.
+- [x] 3.1 Crear `web/src/store/useCajaStore.ts` (Zustand 4): estado `cajaAbierta:boolean`, `sesionCajaId:string|null`, `online:boolean`, `pendientes:number`; acciones `setCajaAbierta`, `setOnline`, `setPendientes`, `refrescar()`. Persistir `cajaAbierta`+`sesionCajaId` (no los eventos). Cablear con `caja.ts` (init `hayCajaAbierta`) y `autoSync` (handlers de `onCambioEstado` y `sincronizarPendientes`).
+- [x] 3.2 Arranque: en `main.tsx` o `Layout`, llamar `refrescar()` + `iniciarAutoSync(...)` una vez para poblar `online`/`pendientes` y disparar sync al reconectar.
 
 **Archivos**: `web/src/store/useCajaStore.ts`, `web/src/main.tsx` (o `Layout.tsx`).
 **Dependencias**: 2.1, 2.2, 2.3.
@@ -61,9 +61,9 @@ Chain strategy: pending
 
 ## Phase 4: Tests Vitest
 
-- [ ] 4.1 `colaOffline.test.ts`: (a) idempotencia — `guardarEvento` dos veces mismo `id_evento` deja 1 registro; (b) persistencia — tras guardar, `listarPendientes` retorna con `estado_sync='pendiente'`; (c) `marcarSyncOk` saca el evento de pendientes; (d) `eliminarEvento` limpia. Usa `fake-indexeddb/auto`.
-- [ ] 4.2 `autoSync.test.ts`: con RPC mock (falla N veces, luego acierta) y `fake-indexeddb`, simular transición offline→online; assert que la subida por evento se invoca exactamente 1 vez (no N por doble disparo) y el evento queda `sync_ok`.
-- [ ] 4.3 (opcional) `caja.test.ts`: `getDeviceId` estable; `abrirCaja` sin cliente devuelve `null` (RN-53).
+- [x] 4.1 `colaOffline.test.ts`: (a) idempotencia — `guardarEvento` dos veces mismo `id_evento` deja 1 registro; (b) persistencia — tras guardar, `listarPendientes` retorna con `estado_sync='pendiente'`; (c) `marcarSyncOk` saca el evento de pendientes; (d) `eliminarEvento` limpia. Usa `fake-indexeddb/auto`.
+- [x] 4.2 `autoSync.test.ts`: con RPC mock (falla N veces, luego acierta) y `fake-indexeddb`, simular transición offline→online; assert que la subida por evento se invoca exactamente 1 vez (no N por doble disparo) y el evento queda `sync_ok`.
+- [x] 4.3 (opcional) `caja.test.ts`: `getDeviceId` estable; `abrirCaja` sin cliente devuelve `null` (RN-53).
 
 **Archivos**: `web/src/lib/colaOffline.test.ts`, `web/src/lib/autoSync.test.ts`, `web/src/lib/caja.test.ts`.
 **Dependencias**: 2.1, 2.2, 2.3, 3.1.
