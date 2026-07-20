@@ -17,7 +17,7 @@ Sistema de punto de venta para ferretería bimonetaria (Venezuela: BS / USD). Ca
 `C:\Proyectos\puntoVenta2`. Empresa del dueño: **FerrehogarMart**
 (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`).
 
-## Estado actual (última actualización: 2026-07-20, sesión de reestructura de catálogo)
+## Estado actual (última actualización: 2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
 ### Decisión de arquitectura del catálogo (SESÍÓN 2026-07-20 — manda sobre lo viejo)
 - **Fuente de datos del catálogo = un Excel en Drive**, NO la app todavía.
@@ -61,6 +61,49 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - React PWA (Vite) + Supabase. Corre en `http://localhost:5173/catalogo` (dev server: `cd web && npm run dev`).
 - El frontend carga imágenes desde `producto.imagen_url` (Supabase Storage), NO desde archivos estáticos.
 - `web/public/catalogo/` fue ELIMINADO (era basura estática no usada).
+
+## Modo Caja Offline (V1, 2026-07-20)
+
+> **Qué es:** la app ahora vende sin internet. Cualquier equipo autorizado abre sesión de caja por
+> dispositivo y vende offline; al volver la red, la cola se sincroniza sola. Equipos sin caja abierta
+> solo consultan el catálogo. Cambio SDD completo y **archivado** (sin CRITICAL; WARNINGs W1/W2/W4
+> cerrados). Documentación viva en `openspec/changes/modo-caja-offline/`
+> (`proposal.md`, `specs/REQ-1..4`, `design.md`, `tasks.md`, `verify-report*.md`, `archive-report.md`).
+
+### Cómo funciona
+- **Sesión por dispositivo (REQ-1):** `crypto.randomUUID()` persistido en `localStorage` (`pv-device-id`).
+  `abrirCaja`/`cerrarCaja` en `web/src/lib/caja.ts`. Si el admin deshabilita la caja (RN-53), la venta
+  opera sin sesión de caja.
+- **Cola IndexedDB (REQ-3):** `web/src/lib/colaOffline.ts` guarda cada venta como evento inmutable en
+  `ventas_pendientes` (clave `id_evento`, offline-first) ANTES de tocar la red. `id_evento` idempotente.
+- **Auto-sync silencioso (REQ-4):** `web/src/lib/autoSync.ts` detecta offline→online + heartbeat y sube
+  la cola vía RPC `aplicar_venta_offline` (upsert por PK, `security invoker`); reintenta con backoff
+  exponencial y **no duplica**. Estado en `web/src/store/useCajaStore.ts`; badge de pendientes en `Layout.tsx`.
+- **Catálogo solo-lectura (REQ-2):** `CatalogoPage`/`PosPage` ocultan Crear/Editar/Borrar/Vender si hay
+  caja habilitada y no está abierta. `web/src/lib/cacheCatalogo.ts` sirve el catálogo desde caché
+  IndexedDB cuando no hay red.
+- **Stock = auditoría:** la venta offline registra `movimiento_stock` causa `venta_offline` (RN-11) y
+  **nunca bloquea** la venta (RN-54/55).
+
+### SQL aplicado (patch_08)
+- `openspec/changes/modo-caja-offline/patch_08_sesion_caja.sql` **YA APLICADO por el usuario** en Supabase
+  (tablas `sesion_caja` + `venta_offline_event` y RPC `aplicar_venta_offline` vivos). Rollback aditivo:
+  dropear función/tablas no rompe el esquema actual.
+
+### ⚠️ Pendiente del usuario (no es bug)
+- **Prueba manual de idempotencia en Supabase:** seguir `openspec/changes/modo-caja-offline/SQL_ACCION_USUARIO.md`.
+  El agente no tiene credenciales, así que el reintento real en servidor no se ejecutó en automatizado.
+  Esperado: `aplicar_venta_offline('evt-verificacion-001', ...)` → `insertado=true` la 1ª vez, `false` la
+  2ª, y **1 sola fila** en `venta_offline_event`. Si difiere, es bug de SQL y se reporta antes de producción.
+
+### Verificación y ramas
+- `web/` → `npm test`: **18/18 pass** (Vitest + happy-dom + fake-indexeddb). `npm run build`: exit 0.
+- Ramas (sin push, stacked): `modo-caja-offline/1-foundacion` → `2-libs` → `3-ui` → `4-fixes`.
+  El orchestrator decidirá push/PR.
+
+### Relación con la deuda técnica
+- V1 **no** corrige la fuga Storage multi-tenant, `confirm()` nativo ni paginación falsa (fuera de scope).
+- La caché de catálogo offline lee imágenes por `imagen_url` (Supabase Storage); no cambia la política de Storage.
 
 ## Deuda técnica real (auditoría 2026-07-19, vigente)
 - 🔴 **Fuga de Storage multi-tenant** — `schema_fase2.sql` (`productos_public_read`) expone objetos

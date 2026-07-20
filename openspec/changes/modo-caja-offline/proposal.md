@@ -1,3 +1,5 @@
+<!-- status: archived | archived-at: 2026-07-20 | by: sdd-archive | artifact_store: both (Engram + OpenSpec) -->
+
 # Proposal: Modo Caja Offline (V1)
 
 ## Intent
