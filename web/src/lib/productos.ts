@@ -311,6 +311,72 @@ function mapearMotivoATipo(motivo: string): string {
   return 'ajuste'
 }
 
+export type HistorialEntry = {
+  id: string
+  empresa_id: string
+  producto_id: string | null
+  producto_nombre: string
+  accion: 'creado' | 'editado' | 'eliminado' | 'ajuste_stock'
+  detalles: Record<string, unknown>
+  usuario_id: string | null
+  creado_en: string
+}
+
+export async function eliminarProducto(id: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('La eliminación requiere conexión con la base de datos')
+  }
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) {
+    throw new Error('No se pudo determinar la empresa')
+  }
+  const { error } = await supabase
+    .from('producto')
+    .delete()
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+  if (error) throw error
+}
+
+export async function registrarHistorial(
+  empresaId: string,
+  productoId: string | null,
+  productoNombre: string,
+  accion: string,
+  detalles: Record<string, unknown>
+): Promise<void> {
+  if (!supabase) return
+  const usuarioId = await obtenerMiUsuarioId()
+  void supabase
+    .from('producto_historial')
+    .insert({
+      empresa_id: empresaId,
+      producto_id: productoId,
+      producto_nombre: productoNombre,
+      accion,
+      detalles,
+      usuario_id: usuarioId,
+    })
+}
+
+export async function obtenerHistorial(
+  empresaId: string,
+  opts?: { productoId?: string; accion?: string; limit?: number }
+): Promise<HistorialEntry[]> {
+  if (!supabase) return []
+  let q = supabase
+    .from('producto_historial')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('creado_en', { ascending: false })
+    .limit(opts?.limit ?? 100)
+  if (opts?.productoId) q = q.eq('producto_id', opts.productoId)
+  if (opts?.accion) q = q.eq('accion', opts.accion)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as HistorialEntry[]
+}
+
 export type AjusteStockInput = {
   productoId: string
   /** Positivo para ingreso, negativo para egreso. Respeta RN-55 (stock negativo si la empresa lo permite). */

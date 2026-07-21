@@ -1701,3 +1701,40 @@ button { font-family: var(--font); }
 .inv-denegado .material-symbols-outlined { font-size: 2.5rem; color: var(--text-secondary); }
 .inv-denegado h2 { margin: 0; }
 .inv-denegado p { color: var(--text-secondary); margin: 0 0 0.5rem; }
+
+/* ---------- ConfirmarEliminarModal ---------- */
+.confirmar-delete-step {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem 0.5rem; background: var(--off-soft); border-radius: var(--radius-sm);
+  border: 1px solid rgba(239,68,68,0.25);
+}
+.confirmar-delete-step .material-symbols-outlined { font-size: 1.6rem; color: var(--off); flex-shrink: 0; }
+.confirmar-delete-step p { margin: 0; font-size: 0.9rem; color: var(--text-primary); }
+.confirmar-delete-step strong { color: var(--off); }
+.confirmar-delete-input {
+  width: 100%; padding: 0.6rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-base); color: var(--text-primary);
+}
+.confirmar-delete-input:focus { outline: none; border-color: var(--off); box-shadow: 0 0 0 2px var(--off-soft); }
+
+/* ---------- HistorialModal ---------- */
+.hist-scroll { max-height: 60vh; overflow: auto; }
+.hist-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.hist-table th {
+  position: sticky; top: 0; background: var(--surface-2); z-index: 1;
+  text-align: left; padding: 0.5rem 0.7rem; font-size: 0.72rem;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em;
+  font-weight: 600; border-bottom: 1px solid var(--border-strong);
+}
+.hist-table td { padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.hist-table tbody tr:hover { background: var(--surface-2); }
+.hist-fecha { white-space: nowrap; color: var(--text-secondary); font-size: 0.78rem; }
+.hist-detalles { color: var(--text-secondary); font-size: 0.78rem; }
+.hist-badge {
+  display: inline-block; font-size: 0.68rem; font-weight: 700;
+  padding: 0.1rem 0.45rem; border-radius: 999px; white-space: nowrap;
+}
+.hist-badge.ok { background: var(--ok-soft); color: #86efac; }
+.hist-badge.info { background: rgba(59,130,246,0.14); color: #93c5fd; }
+.hist-badge.off { background: var(--off-soft); color: #fca5a5; }
+.hist-badge.warn { background: var(--warn-soft); color: #fcd34d; }

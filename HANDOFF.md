@@ -125,9 +125,12 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - **Slice 1 (MVP separación UI):** DONE + VERIFY PASS. Nav 3, CatalogoPage read-only, InventarioPage admin-gated
   (CRUD+categorías+ajuste stock+valuación+alerta), gate rol (`obtenerMiRol`+`useUsuarioRol`). Corregido CRITICAL
   C1/C2 (empresa_id en `crearProducto`/`crearCategoria`). Rama `rediseno-ui/1-ui-sep`.
-- **Slice 2 (Caja UX Fina):** DONE (apply; verify del slice pendiente de correr). `Carrito.tsx` estilo Fina,
-  tasa Bs/$ visible + stale 24h, métodos De contado/A crédito, selector cliente, Total USD+Bs. Offline intacto.
-  Rama `rediseno-ui/2-caja-ux`.
+- **Slice 2 (Caja UX Fina):** DONE + refactorado a **flujo de 2 pantallas** (estilo Fina real).
+  - Pantalla 1: catálogo + carrito lateral, botón "Cobrar — $XX.XX".
+  - Pantalla 2: pago consolidado (resumen productos + cliente opcional + método contado/crédito + instrumentos + confirmar).
+  - Eliminado wizard de 5 pasos. Carrito 100% presentacional. Éxito inline con auto-reset.
+  - Componentes eliminados: WizardStepper, ClienteForm, PagoForm, ResumenFinal, SuccessScreen.
+  - Offline intacto. Rama `rediseno-ui/2-caja-ux`.
 - **Slices 3-6:** PENDIENTES (pagos combinados+cliente+cxc / devoluciones / presupuestos / hardware).
 
 ### ⚠️ Pendiente del usuario (no es bug)

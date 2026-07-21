@@ -5,15 +5,22 @@ import {
   listarCategorias,
   desactivarProducto,
   reactivarProducto,
+  eliminarProducto,
   crearCategoria,
   calcularValuacion,
   aplicarAjusteStock,
+  registrarHistorial,
+  obtenerHistorial,
   PAGE_SIZE,
   type ProductoJoin,
   type Categoria,
+  type HistorialEntry,
 } from '../lib/productos'
+import { obtenerMiEmpresaId } from '../lib/empresa'
 import { ProductoForm } from '../components/ProductoForm'
 import { DataTable } from '../components/DataTable'
+import { ConfirmarEliminarModal } from '../components/ConfirmarEliminarModal'
+import { HistorialModal } from '../components/HistorialModal'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
 
 const MOTIVOS_AJUSTE = ['conteo físico', 'merma', 'devolución', 'otro'] as const
@@ -25,6 +32,8 @@ function fmtUsd(n: number): string {
 function esBajoStock(p: ProductoJoin): boolean {
   return p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo
 }
+
+type DeleteTarget = { producto: ProductoJoin; mode: 'desactivar' | 'eliminar' }
 
 export function InventarioPage() {
   const { inventarioHabilitado } = useUsuarioRol()
@@ -40,13 +49,19 @@ export function InventarioPage() {
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevaCategoria, setNuevaCategoria] = useState('')
 
-  // Panel de ajuste de stock.
   const [ajusteOpen, setAjusteOpen] = useState(false)
   const [ajusteProductoId, setAjusteProductoId] = useState('')
   const [ajusteCantidad, setAjusteCantidad] = useState('')
   const [ajusteMotivo, setAjusteMotivo] = useState<string>(MOTIVOS_AJUSTE[0])
   const [ajusteError, setAjusteError] = useState('')
   const [ajusteSaving, setAjusteSaving] = useState(false)
+
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [deleteSaving, setDeleteSaving] = useState(false)
+
+  const [historialOpen, setHistorialOpen] = useState(false)
+  const [historialEntries, setHistorialEntries] = useState<HistorialEntry[]>([])
+  const [historialLoading, setHistorialLoading] = useState(false)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -78,13 +93,39 @@ export function InventarioPage() {
   const valuacion = useMemo(() => calcularValuacion(productos), [productos])
   const bajos = useMemo(() => productos.filter(esBajoStock), [productos])
 
-  async function onDesactivar(p: ProductoJoin) {
-    if (!confirm(`¿Desactivar "${p.nombre}"? Queda en el historial pero no se venderá más.`)) return
+  function onDesactivarClick(p: ProductoJoin) {
+    setDeleteTarget({ producto: p, mode: 'desactivar' })
+  }
+
+  function onEliminarClick(p: ProductoJoin) {
+    setDeleteTarget({ producto: p, mode: 'eliminar' })
+  }
+
+  async function onConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleteSaving(true)
     try {
-      await desactivarProducto(p.id)
-      setProductos((prev) => prev.map((x) => (x.id === p.id ? { ...x, activo: false } : x)))
+      const empresaId = await obtenerMiEmpresaId()
+      if (deleteTarget.mode === 'desactivar') {
+        await desactivarProducto(deleteTarget.producto.id)
+        setProductos((prev) =>
+          prev.map((x) => (x.id === deleteTarget.producto.id ? { ...x, activo: false } : x))
+        )
+        if (empresaId) {
+          registrarHistorial(empresaId, deleteTarget.producto.id, deleteTarget.producto.nombre, 'eliminado', {})
+        }
+      } else {
+        await eliminarProducto(deleteTarget.producto.id)
+        setProductos((prev) => prev.filter((x) => x.id !== deleteTarget.producto.id))
+        if (empresaId) {
+          registrarHistorial(empresaId, deleteTarget.producto.id, deleteTarget.producto.nombre, 'eliminado', {})
+        }
+      }
+      setDeleteTarget(null)
     } catch (err) {
       setError((err as Error).message)
+    } finally {
+      setDeleteSaving(false)
     }
   }
 
@@ -128,6 +169,16 @@ export function InventarioPage() {
         cantidad,
         motivo: ajusteMotivo,
       })
+      const empresaId = await obtenerMiEmpresaId()
+      if (empresaId) {
+        const ajustado = productos.find((p) => p.id === ajusteProductoId)
+        if (ajustado) {
+          registrarHistorial(empresaId, ajustado.id, ajustado.nombre, 'ajuste_stock', {
+            cantidad,
+            motivo: ajusteMotivo,
+          })
+        }
+      }
       setAjusteOpen(false)
       setAjusteProductoId('')
       setAjusteCantidad('')
@@ -140,7 +191,22 @@ export function InventarioPage() {
     }
   }
 
-  // Gate: solo admin (con kill-switch) puede editar/ajustar.
+  async function onAbrirHistorial() {
+    setHistorialOpen(true)
+    setHistorialLoading(true)
+    try {
+      const empresaId = await obtenerMiEmpresaId()
+      if (empresaId) {
+        const entries = await obtenerHistorial(empresaId)
+        setHistorialEntries(entries)
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setHistorialLoading(false)
+    }
+  }
+
   if (!inventarioHabilitado) {
     return (
       <div className="inv-denegado" role="alert">
@@ -200,6 +266,9 @@ export function InventarioPage() {
               <button onClick={() => void onCrearCategoria()}>Crear</button>
             </div>
           </details>
+          <button className="ghost" onClick={() => void onAbrirHistorial()}>
+            <span className="material-symbols-outlined">history</span> Historial
+          </button>
           <button className="ghost" onClick={() => setAjusteOpen(true)}>
             <span className="material-symbols-outlined">scale</span> Ajuste de stock
           </button>
@@ -248,9 +317,14 @@ export function InventarioPage() {
                   <span className="material-symbols-outlined">edit</span>
                 </button>
                 {p.activo ? (
-                  <button onClick={() => void onDesactivar(p)} title="Desactivar">
-                    <span className="material-symbols-outlined">delete</span>
-                  </button>
+                  <>
+                    <button onClick={() => onDesactivarClick(p)} title="Desactivar">
+                      <span className="material-symbols-outlined">visibility_off</span>
+                    </button>
+                    <button onClick={() => onEliminarClick(p)} title="Eliminar permanentemente">
+                      <span className="material-symbols-outlined">delete</span>
+                    </button>
+                  </>
                 ) : (
                   <button onClick={() => void onReactivar(p)} title="Reactivar">
                     <span className="material-symbols-outlined">check_circle</span>
@@ -280,9 +354,34 @@ export function InventarioPage() {
             setShowNuevo(false)
             setEditId(null)
           }}
-          onSaved={() => {
+          onSaved={async (p) => {
             setShowNuevo(false)
             setEditId(null)
+            if (!edicion) {
+              const empresaId = await obtenerMiEmpresaId()
+              if (empresaId) {
+                registrarHistorial(empresaId, p.id, p.nombre, 'creado', {})
+              }
+            } else {
+              const empresaId = await obtenerMiEmpresaId()
+              if (empresaId) {
+                const campos: string[] = []
+                if (edicion.nombre !== p.nombre) campos.push('nombre')
+                if (edicion.precio_usd !== p.precio_usd) campos.push('precio_usd')
+                if (edicion.costo_usd !== p.costo_usd) campos.push('costo_usd')
+                if (edicion.stock_actual !== p.stock_actual) campos.push('stock_actual')
+                if (edicion.stock_minimo !== p.stock_minimo) campos.push('stock_minimo')
+                if (edicion.categoria_id !== p.categoria_id) campos.push('categoria_id')
+                if (edicion.sku !== p.sku) campos.push('sku')
+                if (edicion.codigo_barras !== p.codigo_barras) campos.push('codigo_barras')
+                if (edicion.unidad !== p.unidad) campos.push('unidad')
+                if (edicion.imagen_url !== p.imagen_url) campos.push('imagen_url')
+                if (edicion.activo !== p.activo) campos.push('activo')
+                if (campos.length > 0) {
+                  registrarHistorial(empresaId, p.id, p.nombre, 'editado', { cambios: campos })
+                }
+              }
+            }
             void cargar()
           }}
         />
@@ -333,6 +432,23 @@ export function InventarioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmarEliminarModal
+          productoNombre={deleteTarget.producto.nombre}
+          onConfirm={() => void onConfirmDelete()}
+          onCancel={() => setDeleteTarget(null)}
+          saving={deleteSaving}
+        />
+      )}
+
+      {historialOpen && (
+        <HistorialModal
+          entries={historialEntries}
+          loading={historialLoading}
+          onClose={() => setHistorialOpen(false)}
+        />
       )}
     </div>
   )
