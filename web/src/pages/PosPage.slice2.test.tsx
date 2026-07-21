@@ -5,7 +5,7 @@ import { listarPendientes, type EventoVentaOffline } from '../lib/colaOffline'
 import { useCajaStore } from '../store/useCajaStore'
 
 // Mock de empresa: dejamos el resto igual y sobreescribimos las funciones que
-// usa PosPage + ventaOffline (patrón heredado de ventaOffline.test.ts).
+// usa PosPage + ventaOffline (patron heredado de ventaOffline.test.ts).
 const { refs } = vi.hoisted(() => ({
   refs: { usuarioId: 'user-1', tasa: 100 },
 }))
@@ -17,7 +17,7 @@ vi.mock('../lib/empresa', async (importOriginal) => {
     obtenerMiUsuarioId: vi.fn(async () => refs.usuarioId),
     obtenerMiEmpresa: vi.fn(async () => ({
       id: 'emp-1',
-      nombre: 'Ferretería Demo',
+      nombre: 'Ferreteria Demo',
       tasa_activa: refs.tasa,
       igtf_habilitado: false,
       caja_obligatoria: false,
@@ -54,7 +54,7 @@ async function limpiarDB() {
   db.close()
 }
 
-describe('PosPage — Slice 2 regresión offline (modo-caja-offline)', () => {
+describe('PosPage — Slice 2 regresion offline (2-pantalla)', () => {
   beforeEach(async () => {
     await limpiarDB()
     localStorage.setItem('pv-device-id', DEVICE)
@@ -63,13 +63,26 @@ describe('PosPage — Slice 2 regresión offline (modo-caja-offline)', () => {
     useCajaStore.getState().setCajaAbierta(true)
   })
 
-  it('venta offline produce evento idéntico en ventas_pendientes (sin regresión de cola)', async () => {
+  it('venta offline produce evento identico en ventas_pendientes', async () => {
     render(<PosPage />)
-    // Esperar a que carguen las sugerencias del catálogo mock.
+
+    // Pantalla 1: agregar producto al carrito
     const btn = await screen.findByRole('button', { name: /Taladro/ })
     fireEvent.click(btn)
 
-    const confirmar = screen.getByRole('button', { name: 'Confirmar' })
+    // Click en "Cobrar" para ir a pantalla 2
+    const cobrar = screen.getByRole('button', { name: /Cobrar/ })
+    fireEvent.click(cobrar)
+
+    // Pantalla 2: ingresar efectivo USD
+    const addPago = screen.getByRole('button', { name: /Agregar pago/ })
+    fireEvent.click(addPago)
+
+    const montoInput = await screen.findByLabelText('Monto del pago 1')
+    fireEvent.change(montoInput, { target: { value: '79' } })
+
+    // Confirmar venta
+    const confirmar = screen.getByRole('button', { name: /Confirmar venta/ })
     fireEvent.click(confirmar)
 
     await waitFor(async () => {
@@ -77,7 +90,6 @@ describe('PosPage — Slice 2 regresión offline (modo-caja-offline)', () => {
       expect(pend.length).toBe(1)
     })
     const pend = (await listarPendientes(DEVICE)) as EventoVentaOffline[]
-    // Mismo contrato que antes del refresh: payload con usuario, total y pago.
     const payload = pend[0].payload as {
       usuario_id: string
       total_usd: string
@@ -87,10 +99,10 @@ describe('PosPage — Slice 2 regresión offline (modo-caja-offline)', () => {
     expect(payload.usuario_id).toBe('user-1')
     expect(payload.detalles[0].producto_id).toBe('prod-1')
     expect(payload.pagos[0].metodo).toBe('efectivo')
+    expect(payload.pagos[0].moneda).toBe('USD')
   })
 
-  it('muestra aviso de tasa desactualizada cuando está offline y la última sync >24h', async () => {
-    // Forzar offline y sembrar una sincronización vieja.
+  it('muestra aviso de tasa desactualizada cuando esta offline y la ultima sync >24h', async () => {
     Object.defineProperty(navigator, 'onLine', {
       configurable: true,
       get: () => false,
@@ -102,19 +114,49 @@ describe('PosPage — Slice 2 regresión offline (modo-caja-offline)', () => {
 
     render(<PosPage />)
     await waitFor(() => {
-      expect(screen.getByText(/Puede estar desactualizada/)).toBeTruthy()
+      expect(screen.getByText(/desactualizada/)).toBeTruthy()
     })
-    // Restaurar online para no afectar otros tests.
     Object.defineProperty(navigator, 'onLine', {
       configurable: true,
       get: () => true,
     })
   })
 
-  it('registra el método de pago seleccionado en la UI (A crédito)', async () => {
+  it('registra el metodo de pago seleccionado en la UI (A credito)', async () => {
     render(<PosPage />)
-    const credito = await screen.findByRole('radio', { name: /A crédito/ })
+
+    // Agregar producto
+    const btn = await screen.findByRole('button', { name: /Taladro/ })
+    fireEvent.click(btn)
+
+    // Ir a pantalla de pago
+    const cobrar = screen.getByRole('button', { name: /Cobrar/ })
+    fireEvent.click(cobrar)
+
+    // Seleccionar credito
+    const credito = await screen.findByRole('radio', { name: /A credito/ })
     fireEvent.click(credito)
     expect(credito.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('boton Cobrar deshabilitado cuando carrito vacio', async () => {
+    render(<PosPage />)
+    expect(screen.queryByRole('button', { name: /Cobrar/ })).toBeNull()
+  })
+
+  it('Volver desde pantalla pago regresa a pantalla venta', async () => {
+    render(<PosPage />)
+
+    const btn = await screen.findByRole('button', { name: /Taladro/ })
+    fireEvent.click(btn)
+
+    const cobrar = screen.getByRole('button', { name: /Cobrar/ })
+    fireEvent.click(cobrar)
+
+    const volver = screen.getByRole('button', { name: /Volver/ })
+    fireEvent.click(volver)
+
+    // Deberia estar de vuelta en pantalla de venta
+    expect(screen.getByRole('button', { name: /Cobrar/ })).toBeTruthy()
   })
 })

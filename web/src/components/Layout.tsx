@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth-context'
 import { logout } from '../lib/auth'
 import { obtenerMiEmpresa, type Empresa } from '../lib/empresa'
@@ -20,6 +20,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [empresa, setEmpresa] = useState<Empresa | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const collapsed = useUIStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const theme = useUIStore((s) => s.theme)
@@ -103,10 +104,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="main-col">
         <header className="topbar">
-          <button className="topbar-cmd" onClick={() => setPaletteOpen(true)}>
-            <span className="material-symbols-outlined">search</span>
-            Buscar o navegar… <kbd>Ctrl K</kbd>
-          </button>
+          {location.pathname !== '/' && (
+            <button className="topbar-cmd" onClick={() => setPaletteOpen(true)}>
+              <span className="material-symbols-outlined">search</span>
+              Buscar o navegar… <kbd>Ctrl K</kbd>
+            </button>
+          )}
           <div className="topbar-user">{session?.user?.email ?? ''}</div>
           <div className="topbar-caja">
             <span className={`estado-conexion ${online ? 'on' : 'off'}`} aria-label={online ? 'En línea' : 'Sin conexión'}>

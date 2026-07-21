@@ -21,7 +21,8 @@ function generarIdEvento(): string {
 
 export async function registrarVentaOffline(
   p: ProductoJoin,
-  cantidad = 1
+  cantidad = 1,
+  pagos?: Array<{ metodo: string; moneda: string; monto: string; monto_usd: string; tasa_aplicada: string }>
 ): Promise<string> {
   const empresaId = await obtenerMiEmpresaId()
   if (!empresaId) throw new Error('No se pudo determinar la empresa')
@@ -57,15 +58,17 @@ export async function registrarVentaOffline(
           subtotal_usd: subtotal,
         },
       ],
-      pagos: [
-        {
-          metodo: 'efectivo',
-          moneda: 'USD',
-          monto: subtotal,
-          monto_usd: subtotal,
-          tasa_aplicada: '1',
-        },
-      ],
+      pagos: pagos && pagos.length > 0
+        ? pagos
+        : [
+            {
+              metodo: 'efectivo',
+              moneda: 'USD',
+              monto: subtotal,
+              monto_usd: subtotal,
+              tasa_aplicada: '1',
+            },
+          ],
     },
     auditoria_stock: [
       { producto_id: p.id, cantidad: String(cant), observacion: 'venta_offline' },
