@@ -230,6 +230,26 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 3. **Aplicar `patch_05` (storage writes)** y confirmar `patch_06`/`patch_07` en Supabase.
 4. **Llevar lenguaje visual del catálogo a Login/Registro/Venta** para consistencia.
 
+## Rol del Excel (decisión 2026-07-22)
+El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una fuente viva.
+- **Pre-producción:** el sync `sync_desde_excel.py` carga el inventario inicial a Supabase.
+- **Producción:** el Excel se ignora. La app (Supabase) es la única fuente de verdad.
+- **No hay sincronización inversa** (app → Excel). Si se edita un producto en la app, el Excel
+  no se actualiza. Si se vuelve a correr el sync, los cambios de la app se pierden (por eso
+  el sync solo se usa para bootstrap inicial).
+- **Pendiente futuro:** feature "Catálogo semilla" para onboarding de nuevos tenants
+  (ver sección abajo).
+
+## Catálogo semilla — onboarding de nuevos tenants (idea 2026-07-22)
+Cuando una nueva empresa instala la app por primera vez, recibe el catálogo semilla
+(los ~582 productos de ferretería) como punto de partida. La empresa puede elegir:
+- **Categorías:** cargar todo, o seleccionar categorías específicas.
+- **SKU:** conservar los códigos originales, o pedir que la app genere SKU nuevos.
+- **Imágenes:** incluir las imágenes del catálogo semilla, o omitirlas (las sube después).
+
+Una vez que la empresa confirma la carga, los productos se insertan en Supabase con su
+`empresa_id` y el catálogo semilla ya no le importa. La app es su fuente de verdad.
+
 ## Cómo retomar al abrir sesión nueva (CHECKLIST para el asistente)
 1. Leer este `HANDOFF.md` (palabra clave "matrix").
 2. `git status` y `git log --oneline -5`.
