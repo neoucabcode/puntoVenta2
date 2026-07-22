@@ -25,7 +25,6 @@ export function Layout({ children }: { children: ReactNode }) {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const theme = useUIStore((s) => s.theme)
   const toggleTheme = useUIStore((s) => s.toggleTheme)
-  const resetZoom = useUIStore((s) => s.resetZoom)
   const pendientes = useCajaStore((s) => s.pendientes)
   const online = useCajaStore((s) => s.online)
   const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
@@ -126,9 +125,6 @@ export function Layout({ children }: { children: ReactNode }) {
               </button>
             )}
           </div>
-          <button className="topbar-reset-zoom" onClick={resetZoom} aria-label="Restablecer zoom" title="Restablecer zoom (100%)">
-            <span className="material-symbols-outlined">zoom_out_map</span>
-          </button>
           <button className="topbar-theme" onClick={toggleTheme} aria-label="Cambiar tema" title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
             <span className="material-symbols-outlined">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
           </button>

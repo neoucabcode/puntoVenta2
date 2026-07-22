@@ -182,7 +182,7 @@ button { font-family: var(--font); }
 }
 .content { padding: 1.25rem; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .topbar-cmd {
-  flex: 1; max-width: 420px; text-align: left;
+  flex: 1 1 260px; max-width: 360px; text-align: left;
   background: var(--surface-1); border: 1px solid var(--border);
   color: var(--text-secondary); border-radius: var(--radius-sm);
   padding: 0.55rem 0.8rem; cursor: pointer; font-size: 0.85rem;
@@ -190,7 +190,7 @@ button { font-family: var(--font); }
 }
 .topbar-cmd .material-symbols-outlined { font-size: 1.1rem; }
 .topbar-cmd:hover { border-color: var(--border-strong); }
-.topbar-user { margin-left: auto; font-size: 0.8rem; color: var(--text-muted); }
+.topbar-user { font-size: 0.8rem; color: var(--text-muted); }
 .topbar-theme {
   margin-left: 0.5rem; background: var(--surface-1); border: 1px solid var(--border);
   color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer;
@@ -198,13 +198,6 @@ button { font-family: var(--font); }
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .topbar-theme:hover { background: var(--surface-3); color: var(--text-primary); border-color: var(--border-strong); }
-.topbar-reset-zoom {
-  margin-left: 0.5rem; background: var(--surface-1); border: 1px solid var(--border);
-  color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer;
-  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-.topbar-reset-zoom:hover { background: var(--surface-3); color: var(--text-primary); border-color: var(--border-strong); }
 /* ---------- Auth cards ---------- */
 .center { min-height: 100vh; display: grid; place-items: center; }
 .card { background: var(--surface-1); padding: 2rem; border-radius: 14px; width: 340px; display: flex; flex-direction: column; gap: 0.75rem; border: 1px solid var(--border); }
