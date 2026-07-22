@@ -119,7 +119,6 @@ export function CatalogoPage() {
     <div className="catalogo">
       <header className="catalogo-toolbar">
         <div className="catalogo-head">
-          <h2 className="catalogo-title">Catálogo de productos</h2>
           <p className="catalogo-sub">
             {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
           </p>

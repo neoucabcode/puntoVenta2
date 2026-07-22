@@ -109,6 +109,18 @@ export function Layout({ children }: { children: ReactNode }) {
               Buscar o navegar… <kbd>Ctrl K</kbd>
             </button>
           )}
+          {location.pathname === '/catalogo' && (
+            <div className="topbar-page-title">
+              <span className="material-symbols-outlined">inventory_2</span>
+              Catálogo de productos
+            </div>
+          )}
+          {location.pathname === '/inventario' && (
+            <div className="topbar-page-title">
+              <span className="material-symbols-outlined">inventory</span>
+              Inventario
+            </div>
+          )}
           <div className="topbar-user">{session?.user?.email ?? ''}</div>
           <div className="topbar-caja">
             <span className={`estado-conexion ${online ? 'on' : 'off'}`} aria-label={online ? 'En línea' : 'Sin conexión'}>

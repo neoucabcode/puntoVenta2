@@ -225,7 +225,6 @@ export function InventarioPage() {
     <div className="inventario">
       <header className="inv-toolbar">
         <div className="inv-head">
-          <h2 className="inv-title">Inventario</h2>
           <p className="inv-sub">
             {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
             {bajos.length > 0 && (
@@ -293,74 +292,76 @@ export function InventarioPage() {
         </div>
       </header>
 
-      {error && <p className="error">{error}</p>}
+      <div className="inv-body">
+        <main className="inv-main">
+          {error && <p className="error">{error}</p>}
 
-      {loading ? (
-        <p>Cargando…</p>
-      ) : vista === 'grid' ? (
-        <div className="productos-grid-scroll">
-          <div className="productos-grid">
-            {productos.map((p) => (
-              <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
-                <div className="card-img">
-                  {p.imagen_url ? (
-                    <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
-                  ) : (
-                    <span className="thumb-empty material-symbols-outlined">image</span>
-                  )}
-                  {esBajoStock(p) && (
-                    <span className="ribbon warn" title={`Por debajo del mínimo (${p.stock_minimo})`}>
-                      <span className="material-symbols-outlined">warning</span> Bajo stock
-                    </span>
-                  )}
-                </div>
-                <div className="card-info">
-                  <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
-                  <div className="card-nombre">{p.nombre}</div>
-                  <div className="card-meta">
-                    <span>{p.categoria?.nombre ?? '—'}</span>
-                  </div>
-                  <div className="card-footer">
-                    <div className="card-precio">
-                      {p.precio_usd > 0 ? (
-                        `$${p.precio_usd.toFixed(2)}`
+          {loading ? (
+            <p>Cargando…</p>
+          ) : vista === 'grid' ? (
+            <div className="productos-grid-scroll">
+              <div className="productos-grid">
+                {productos.map((p) => (
+                  <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
+                    <div className="card-img">
+                      {p.imagen_url ? (
+                        <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
                       ) : (
-                        <span className="badge warn">sin precio</span>
+                        <span className="thumb-empty material-symbols-outlined">image</span>
+                      )}
+                      {esBajoStock(p) && (
+                        <span className="ribbon warn" title={`Por debajo del mínimo (${p.stock_minimo})`}>
+                          <span className="material-symbols-outlined">warning</span> Bajo stock
+                        </span>
                       )}
                     </div>
-                    <div className={`card-stock ${!p.activo ? 'off' : esBajoStock(p) ? 'warn' : ''}`}>
-                      {p.stock_actual} uds
+                    <div className="card-info">
+                      <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
+                      <div className="card-nombre">{p.nombre}</div>
+                      <div className="card-meta">
+                        <span>{p.categoria?.nombre ?? '—'}</span>
+                      </div>
+                      <div className="card-footer">
+                        <div className="card-precio">
+                          {p.precio_usd > 0 ? (
+                            `$${p.precio_usd.toFixed(2)}`
+                          ) : (
+                            <span className="badge warn">sin precio</span>
+                          )}
+                        </div>
+                        <div className={`card-stock ${!p.activo ? 'off' : esBajoStock(p) ? 'warn' : ''}`}>
+                          {p.stock_actual} uds
+                        </div>
+                      </div>
+                      <div className="card-costo">
+                        <span className="num-tab">{fmtUsd(p.costo_usd)}</span>
+                      </div>
+                      <div className="card-actions">
+                        <button onClick={() => setEditId(p.id)} title="Editar">
+                          <span className="material-symbols-outlined">edit</span>
+                        </button>
+                        {p.activo ? (
+                          <>
+                            <button onClick={() => onDesactivarClick(p)} title="Desactivar">
+                              <span className="material-symbols-outlined">visibility_off</span>
+                            </button>
+                            <button onClick={() => onEliminarClick(p)} title="Eliminar permanentemente">
+                              <span className="material-symbols-outlined">delete</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button onClick={() => void onReactivar(p)} title="Reactivar">
+                            <span className="material-symbols-outlined">check_circle</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="card-costo">
-                    <span className="num-tab">{fmtUsd(p.costo_usd)}</span>
-                  </div>
-                  <div className="card-actions">
-                    <button onClick={() => setEditId(p.id)} title="Editar">
-                      <span className="material-symbols-outlined">edit</span>
-                    </button>
-                    {p.activo ? (
-                      <>
-                        <button onClick={() => onDesactivarClick(p)} title="Desactivar">
-                          <span className="material-symbols-outlined">visibility_off</span>
-                        </button>
-                        <button onClick={() => onEliminarClick(p)} title="Eliminar permanentemente">
-                          <span className="material-symbols-outlined">delete</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button onClick={() => void onReactivar(p)} title="Reactivar">
-                        <span className="material-symbols-outlined">check_circle</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <DataTable
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <DataTable
         columnas={[
           { key: 'sku', titulo: 'SKU', render: (p: ProductoJoin) => <code>{p.sku ?? '—'}</code> },
           { key: 'nombre', titulo: 'Nombre', render: (p: ProductoJoin) => p.nombre },
@@ -416,6 +417,8 @@ export function InventarioPage() {
         isInactivo={(p) => !p.activo}
         empty="No hay productos para los filtros actuales"
       />)}
+        </main>
+      </div>
 
       <footer className="inv-valuacion">
         <span className="inv-valuacion-label">Valuación de inventario</span>
