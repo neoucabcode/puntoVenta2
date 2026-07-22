@@ -42,6 +42,7 @@ export function InventarioPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
+  const [vista, setVista] = useState<'grid' | 'lista'>('lista')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -254,6 +255,20 @@ export function InventarioPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <div className="toggle-vista" role="group" aria-label="Vista">
+            <button
+              className={vista === 'grid' ? 'active' : ''}
+              onClick={() => setVista('grid')}
+              aria-pressed={vista === 'grid'}
+              title="Cuadrícula"
+            ><span className="material-symbols-outlined">grid_view</span></button>
+            <button
+              className={vista === 'lista' ? 'active' : ''}
+              onClick={() => setVista('lista')}
+              aria-pressed={vista === 'lista'}
+              title="Lista"
+            ><span className="material-symbols-outlined">list</span></button>
+          </div>
           <details className="nueva-cat">
             <summary>+ Categoría</summary>
             <div className="row">
@@ -282,8 +297,70 @@ export function InventarioPage() {
 
       {loading ? (
         <p>Cargando…</p>
+      ) : vista === 'grid' ? (
+        <div className="productos-grid-scroll">
+          <div className="productos-grid">
+            {productos.map((p) => (
+              <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
+                <div className="card-img">
+                  {p.imagen_url ? (
+                    <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
+                  ) : (
+                    <span className="thumb-empty material-symbols-outlined">image</span>
+                  )}
+                  {esBajoStock(p) && (
+                    <span className="ribbon warn" title={`Por debajo del mínimo (${p.stock_minimo})`}>
+                      <span className="material-symbols-outlined">warning</span> Bajo stock
+                    </span>
+                  )}
+                </div>
+                <div className="card-info">
+                  <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
+                  <div className="card-nombre">{p.nombre}</div>
+                  <div className="card-meta">
+                    <span>{p.categoria?.nombre ?? '—'}</span>
+                  </div>
+                  <div className="card-footer">
+                    <div className="card-precio">
+                      {p.precio_usd > 0 ? (
+                        `$${p.precio_usd.toFixed(2)}`
+                      ) : (
+                        <span className="badge warn">sin precio</span>
+                      )}
+                    </div>
+                    <div className={`card-stock ${!p.activo ? 'off' : esBajoStock(p) ? 'warn' : ''}`}>
+                      {p.stock_actual} uds
+                    </div>
+                  </div>
+                  <div className="card-costo">
+                    <span className="num-tab">{fmtUsd(p.costo_usd)}</span>
+                  </div>
+                  <div className="card-actions">
+                    <button onClick={() => setEditId(p.id)} title="Editar">
+                      <span className="material-symbols-outlined">edit</span>
+                    </button>
+                    {p.activo ? (
+                      <>
+                        <button onClick={() => onDesactivarClick(p)} title="Desactivar">
+                          <span className="material-symbols-outlined">visibility_off</span>
+                        </button>
+                        <button onClick={() => onEliminarClick(p)} title="Eliminar permanentemente">
+                          <span className="material-symbols-outlined">delete</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => void onReactivar(p)} title="Reactivar">
+                        <span className="material-symbols-outlined">check_circle</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
       ) : (
-      <DataTable
+        <DataTable
         columnas={[
           { key: 'sku', titulo: 'SKU', render: (p: ProductoJoin) => <code>{p.sku ?? '—'}</code> },
           { key: 'nombre', titulo: 'Nombre', render: (p: ProductoJoin) => p.nombre },
