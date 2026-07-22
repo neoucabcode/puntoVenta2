@@ -88,11 +88,10 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
             image={image}
             crop={crop}
             zoom={zoom}
-            aspect={NaN}
+            aspect={4 / 3}
             onCropChange={setCrop}
             onZoomChange={setZoom}
             onCropComplete={onCropComplete}
-            cropSize={{ width: 280, height: 200 }}
           />
         </div>
         <div className="image-editor-controls">
