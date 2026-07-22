@@ -273,11 +273,13 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 
 ## Rol del Excel (decisión 2026-07-22)
 El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una fuente viva.
-- **Pre-producción:** el sync `sync_desde_excel.py` carga el inventario inicial a Supabase.
+- **Estado:** ✅ DATOS COMPLETADOS (2026-07-22). Todos los productos ya están en Supabase.
+  El Excel se da por terminado para edición de datos. No se corre más `sync_desde_excel.py`.
+- **Único pendiente:** imágenes. El usuario va agregando `{sku}.webp` a la carpeta de Drive
+  y las sube manualmente cuando las tenga.
 - **Producción:** el Excel se ignora. La app (Supabase) es la única fuente de verdad.
 - **No hay sincronización inversa** (app → Excel). Si se edita un producto en la app, el Excel
-  no se actualiza. Si se vuelve a correr el sync, los cambios de la app se pierden (por eso
-  el sync solo se usa para bootstrap inicial).
+  no se actualiza.
 - **Pendiente futuro:** feature "Catálogo semilla" para onboarding de nuevos tenants
   (ver sección abajo).
 
