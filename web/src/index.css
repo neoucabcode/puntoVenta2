@@ -1702,6 +1702,36 @@ button { font-family: var(--font); }
 .inv-denegado h2 { margin: 0; }
 .inv-denegado p { color: var(--text-secondary); margin: 0 0 0.5rem; }
 
+/* ---------- SkuPreview ---------- */
+.sku-preview { display: inline-flex; }
+.sku-preview .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--mono);
+}
+.sku-preview .badge .material-symbols-outlined { font-size: 0.85rem; }
+
+/* ---------- DuplicadoAlert ---------- */
+.duplicado-alert-step {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem 0.5rem; background: var(--warn-soft); border-radius: var(--radius-sm);
+  border: 1px solid rgba(245,158,11,0.25);
+}
+.duplicado-alert-step .material-symbols-outlined { font-size: 1.6rem; color: var(--warn); flex-shrink: 0; }
+.duplicado-alert-step p { margin: 0; font-size: 0.9rem; color: var(--text-primary); }
+.duplicado-list {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.25rem 0;
+}
+.duplicado-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.45rem 0.6rem; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.duplicado-item-nombre { font-weight: 600; font-size: 0.85rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duplicado-item-sku { font-family: var(--mono); font-size: 0.72rem; color: var(--text-muted); flex-shrink: 0; }
+
 /* ---------- ConfirmarEliminarModal ---------- */
 .confirmar-delete-step {
   display: flex; align-items: center; gap: 0.6rem;

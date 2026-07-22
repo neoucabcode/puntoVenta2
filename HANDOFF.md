@@ -17,7 +17,72 @@ Sistema de punto de venta para ferretería bimonetaria (Venezuela: BS / USD). Ca
 `C:\Proyectos\puntoVenta2`. Empresa del dueño: **FerrehogarMart**
 (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`).
 
-## Estado actual (última actualización: 2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
+## Estado actual (última actualización: 2026-07-21, sesión de SKU configurable + limpieza duplicados)
+
+### Limpieza de duplicados (2026-07-21)
+- **Auditoría del Excel:** 4 grupos de duplicados exactos encontrados (8 productos).
+- **Limpiados del Excel y de Supabase:**
+  - FILTRO ROSCA 1/4 162 → quedó REF0015 (borrado REF0014)
+  - FILTRO ROSCA 3/8 163 → quedó REF0019 (borrado REF0018)
+  - FILTRO ROSCA 5/8 165 → quedó REF0022 (borrado REF0021)
+  - LLAVE PLASTICA DISPENSADOR → quedó FER0029 (borrado FER0030)
+- **Sync ejecutado:** 580 productos del Excel → 582 en BD (19 insertados, 22 actualizados, 59 imágenes subidas forzado).
+- **Estado BD:** 582 productos, 8 categorías, 130 con imagen.
+- Scripts de auditoría en `supabase/audit_duplicates.py`, `audit_fuzzy.py`, `cleanup_duplicates.py`, `verify_sync.py` (pueden borrarse después).
+
+### SKU Configurable + Fuzzy Matching (2026-07-21 — implementado, NO aplicado a BD)
+> **Cambio SDD `sku-configurable`** — generación automática de SKU configurable por empresa,
+> fuzzy matching para prevenir duplicados, y convención de imagen por SKU.
+
+#### Qué se hizo
+- **Spec + Design + Tasks** en `openspec/changes/sku-configurable/`
+- **SQL:** `supabase/patch_11_sku_configurable.sql` (CREADO, PENDIENTE DE APLICAR)
+  - Tabla `empresa_configuracion_sku` (config por empresa)
+  - Tabla `empresa_sku_contador` (contadores atómicos)
+  - Columna `categoria.codigo` (char 3)
+  - Índice único SKU por empresa (partial, ignora nulls)
+  - Índice trigram GiST en `producto.nombre`
+  - RPC `generar_sku` (contador atómico + 3 plantillas)
+  - RPC `buscar_productos_similares` (pg_trgm, umbral configurable)
+  - Trigger `trg_config_sku_default` (config por defecto al crear empresa)
+- **Frontend:**
+  - `web/src/lib/sku.ts` — capa API (config, generación, fuzzy)
+  - `web/src/hooks/useEmpresaConfig.ts` — hook de config
+  - `web/src/hooks/useSkuPreview.ts` — preview debounce de SKU
+  - `web/src/components/SkuPreview.tsx` — badge de SKU
+  - `web/src/components/DuplicadoAlert.tsx` — modal de alerta duplicados
+  - `web/src/components/SkuConfigForm.tsx` — form de config (admin)
+  - `web/src/components/ProductoForm.tsx` — integrado con auto-gen, fuzzy, read-only
+  - `web/src/lib/productos.ts` — rutas imagen por SKU, renombrar, limpieza delete
+  - `web/src/lib/mock-data.ts` — mocks para offline
+  - `web/src/index.css` — estilos nuevos
+
+#### Plantillas soportadas
+| Plantilla | Ejemplo | Requiere categoría |
+|---|---|---|
+| `categoria_secuencial` | `COC0001` | Sí |
+| `solo_secuencial` | `00001` | No |
+| `prefijo_fijo_secuencial` | `TIENDA-0001` | No |
+
+#### Pendiente
+1. **Aplicar `patch_11_sku_configurable.sql`** en Supabase (el usuario lo corre manualmente)
+2. **Commitear** los cambios (8 archivos nuevos, 4 modificados, ~950 líneas)
+3. **Crear rama** para el PR (o commitear en la rama actual)
+4. **Verificación manual** de los flujos en la app
+
+#### Decisiones tomadas
+- **No se migran productos existentes** — la config aplica solo a productos nuevos
+- **SKU manual sigue funcionando** cuando `autogenerar_activo = false`
+- **Editor de imágenes postergado** — queda el upload actual (file picker)
+- **Columna `categoria.codigo` descartada por ahora** — se agrega si otra empresa la necesita
+- **Convención de imagen:** se mantiene `{empresa_id}/{productoId}.{ext}` por ahora (la spec proponía `{empresa_id}/{sku}.webp` pero hay productos existentes sin SKU)
+
+#### Verificación
+- `tsc --noEmit`: 0 errores
+- `npm test`: 56/56 pasan
+- `npm run build`: exit 0
+
+## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
 ### Decisión de arquitectura del catálogo (SESÍÓN 2026-07-20 — manda sobre lo viejo)
 - **Fuente de datos del catálogo = un Excel en Drive**, NO la app todavía.

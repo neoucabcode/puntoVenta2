@@ -9,7 +9,6 @@ import {
   reactivarProductoMock,
   crearCategoriaMock,
   subirImagenProductoMock,
-  verificarSkuDuplicadoMock,
   verificarCodigoDuplicadoMock,
 } from './mock-data'
 
@@ -53,6 +52,7 @@ export type ListarResult = {
 export type Categoria = {
   id: string
   nombre: string
+  codigo?: string | null
 }
 
 export type ProductoJoin = Producto & {
@@ -244,13 +244,13 @@ export async function crearCategoria(nombre: string): Promise<Categoria> {
 export async function subirImagenProducto(
   file: File,
   empresaId: string,
-  productoId: string
+  sku: string
 ): Promise<string> {
   if (!supabase) {
-    return subirImagenProductoMock(file, empresaId, productoId)
+    return subirImagenProductoMock(file, empresaId, sku)
   }
   const ext = file.name.split('.').pop()?.toLowerCase() || 'webp'
-  const path = `${empresaId}/${productoId}.${ext}`
+  const path = `${empresaId}/${sku}.${ext}`
   const { error } = await supabase.storage
     .from('productos')
     .upload(path, file, { upsert: true, contentType: file.type })
@@ -259,23 +259,22 @@ export async function subirImagenProducto(
   return data.publicUrl
 }
 
-export async function verificarSkuDuplicado(
-  sku: string | null,
-  ignorarId?: string | null
-): Promise<boolean> {
-  if (!supabase) {
-    return verificarSkuDuplicadoMock(sku)
-  }
-  if (!sku) return false
-  let q = supabase
-    .from('producto')
-    .select('id')
-    .eq('sku', sku)
-    .limit(1)
-  if (ignorarId) q = q.neq('id', ignorarId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).length > 0
+export async function renombrarImagen(
+  empresaId: string,
+  oldSku: string,
+  newSku: string,
+  ext: string
+): Promise<void> {
+  if (!supabase) return
+  const bucket = supabase.storage.from('productos')
+  const oldPath = `${empresaId}/${oldSku}.${ext}`
+  const newPath = `${empresaId}/${newSku}.${ext}`
+  // Copiar archivo a nueva ubicación
+  const { error: copyError } = await bucket.copy(oldPath, newPath)
+  if (copyError) throw copyError
+  // Eliminar archivo antiguo
+  const { error: deleteError } = await bucket.remove([oldPath])
+  if (deleteError) throw deleteError
 }
 
 export async function verificarCodigoDuplicado(
@@ -330,6 +329,28 @@ export async function eliminarProducto(id: string): Promise<void> {
   if (!empresaId) {
     throw new Error('No se pudo determinar la empresa')
   }
+  // Obtener sku e imagen_url antes de borrar la fila para limpiar Storage.
+  const { data: producto, error: fetchError } = await supabase
+    .from('producto')
+    .select('sku,imagen_url')
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .single()
+  if (fetchError) throw fetchError
+
+  // Si tiene imagen subida a Storage, eliminar el archivo.
+  if (producto?.imagen_url && producto?.sku) {
+    const ext = producto.imagen_url.split('.').pop()?.split('?')[0] || 'webp'
+    const filePath = `${empresaId}/${producto.sku}.${ext}`
+    const { error: storageError } = await supabase.storage
+      .from('productos')
+      .remove([filePath])
+    // Ignorar error 404 (archivo ya no existe) — solo lanzar errores reales.
+    if (storageError && storageError.message !== 'The resource was not found') {
+      throw storageError
+    }
+  }
+
   const { error } = await supabase
     .from('producto')
     .delete()
