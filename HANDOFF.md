@@ -15,7 +15,48 @@
 ## Proyecto
 Sistema de punto de venta para ferretería bimonetaria (Venezuela: BS / USD). Carpeta:
 `C:\Proyectos\puntoVenta2`. Empresa del dueño: **FerrehogarMart**
-(id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`).
+(id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`). Modelo SaaS multi-tenant.
+
+## Arquitectura de tenants y roles (decisión 2026-07-22)
+
+### Qué es un tenant
+Un tenant = una empresa. Cada empresa tiene un `empresa_id` único. Los datos están
+**aislados** con Row Level Security (RLS) en Supabase. Un usuario de FerrehogarMart
+nunca ve los datos de "El Martillo" ni viceversa.
+
+### Roles (3 niveles)
+
+| Rol | Quién es | Qué puede hacer | Cómo se asigna |
+|---|---|---|---|
+| **Super Admin** | Vos (dueño de la plataforma) | Ve todo: todas las empresas, todos los datos. Configura la plataforma, crea el catálogo semilla. NO interviene en apps de otros a menos que le pidan soporte. | Acceso directo a Supabase (hoy no hay UI para esto) |
+| **Admin de empresa** | Dueño de "El Martillo" (cada empresa tiene hasta 2) | Gestiona SU empresa: usuarios, productos (inventario CRUD), caja, configuración. Asigna roles a sus empleados. | El super admin crea la empresa y le da acceso inicial; el admin gestiona lo demás |
+| **Vendedor** | Empleado de "El Martillo" | Vende (caja), ve catálogo (solo lectura). NO ve inventario, NO ve configuración. Operación limitada a su turno. | El admin de empresa le crea usuario y asigna rol `vendedor` |
+
+### Flujo de una nueva empresa
+```
+1. Super admin (vos) crea la cuenta de "El Martillo" en Supabase
+   → le asigna empresa_id único
+   → le carga el catálogo semilla (lo que elija)
+
+2. Dueño de "El Martillo" entra a la app
+   → ve SU inventario (aislado)
+   → crea usuarios para sus empleados
+   → les asigna rol: "admin" o "vendedor"
+
+3. Empleados de "El Martillo" entran
+   → cada uno ve solo lo que le corresponde
+
+4. Vos no ves nada de "El Martillo" a menos que:
+   → él te pida soporte
+   → uses el super admin para verificar algo
+```
+
+### Estado actual de implementación
+- ✅ RLS por `empresa_id` activo (aislamiento de datos)
+- ✅ Gate de inventario: solo `rol = 'admin'` accede
+- ✅ `obtenerMiRol()` + `useUsuarioRol()` para control de acceso
+- ❌ **No hay UI de super admin** (panel para gestionar todas las empresas)
+- ❌ **No hay UI de configuración de empresa** (SkuConfigForm existe pero no tiene acceso)
 
 ## Estado actual (última actualización: 2026-07-21, sesión de SKU configurable + limpieza duplicados)
 
