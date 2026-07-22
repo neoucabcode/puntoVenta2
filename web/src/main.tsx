@@ -1,4 +1,4 @@
-import { StrictMode, useEffect } from 'react'
+import { StrictMode, useEffect, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './lib/auth-context'
@@ -9,7 +9,12 @@ import { RegistroPage } from './pages/RegistroPage'
 import { PosPage } from './pages/PosPage'
 import { CatalogoPage } from './pages/CatalogoPage'
 import { RequireAuth } from './components/RequireAuth'
+const InventarioPage = lazy(() =>
+  import('./pages/InventarioPage').then((m) => ({ default: m.InventarioPage }))
+)
 import { Layout } from './components/Layout'
+import { useCajaStore } from './store/useCajaStore'
+import { iniciarAutoSync } from './lib/autoSync'
 import '@fontsource/jetbrains-mono'
 import './index.css'
 
@@ -23,6 +28,17 @@ function Root() {
   useEffect(() => {
     document.documentElement.style.zoom = String(zoom)
   }, [zoom])
+  // Arranque único del auto-sync offline -> online (REQ-4). Refleja en el store.
+  useEffect(() => {
+    const stop = iniciarAutoSync({
+      onCambioEstado: (online, pendientes) => {
+        const s = useCajaStore.getState()
+        s.setOnline(online)
+        s.setPendientes(pendientes)
+      },
+    })
+    return stop
+  }, [])
   if (loading) return <p className="center">Cargando…</p>
   return (
     <Routes>
@@ -44,6 +60,18 @@ function Root() {
           <RequireAuth>
             <Layout>
               <CatalogoPage />
+            </Layout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/inventario"
+        element={
+          <RequireAuth>
+            <Layout>
+              <Suspense fallback={<p className="center">Cargando…</p>}>
+                <InventarioPage />
+              </Suspense>
             </Layout>
           </RequireAuth>
         }

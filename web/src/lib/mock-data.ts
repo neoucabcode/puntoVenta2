@@ -286,6 +286,11 @@ export function getMockEmpresaId(): string | null {
   return state.companyId ?? null
 }
 
+export function getMockUsuarioId(): string | null {
+  const state = readState()
+  return state.session?.user?.id ?? null
+}
+
 export async function listarProductosMock(opts?: {
   search?: string
   categoriaId?: string | null
@@ -525,6 +530,110 @@ export async function importarCatalogoMock(file: File): Promise<{ imported: numb
   }
 
   return applyCatalogPayload(payload)
+}
+
+// --- Mocks para SKU configurable ---
+
+type MockSkuConfig = {
+  id: string
+  empresa_id: string
+  autogenerar_activo: boolean
+  plantilla: 'categoria_secuencial' | 'solo_secuencial' | 'prefijo_fijo_secuencial'
+  usa_categoria: boolean
+  modo_contador: 'por_categoria' | 'global'
+  longitud_secuencial: number
+  prefijo_manual: string | null
+  umbral_similitud: number
+  creado_en: string
+  actualizado_en: string
+}
+
+const SKU_CONFIG_KEY = 'pv-local-sku-config-v1'
+
+function getMockSkuConfig(empresaId: string): MockSkuConfig | null {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem(SKU_CONFIG_KEY)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Record<string, MockSkuConfig>
+    return parsed[empresaId] ?? null
+  } catch {
+    return null
+  }
+}
+
+function persistMockSkuConfig(empresaId: string, config: MockSkuConfig): void {
+  if (typeof window === 'undefined') return
+  const raw = window.localStorage.getItem(SKU_CONFIG_KEY)
+  const map: Record<string, MockSkuConfig> = raw ? JSON.parse(raw) : {}
+  map[empresaId] = config
+  window.localStorage.setItem(SKU_CONFIG_KEY, JSON.stringify(map))
+}
+
+export async function obtenerConfigSkuMock(empresaId: string): Promise<MockSkuConfig | null> {
+  return getMockSkuConfig(empresaId)
+}
+
+export async function generarSkuMock(
+  empresaId: string,
+  _categoriaId?: string
+): Promise<string | null> {
+  const config = getMockSkuConfig(empresaId)
+  if (!config || !config.autogenerar_activo) return null
+  const counter = Math.floor(Math.random() * 9999) + 1
+  const padded = String(counter).padStart(config.longitud_secuencial, '0')
+  if (config.plantilla === 'prefijo_fijo_secuencial' && config.prefijo_manual) {
+    return `${config.prefijo_manual}-${padded}`
+  }
+  if (config.plantilla === 'categoria_secuencial' && _categoriaId) {
+    const catCode = _categoriaId.slice(0, 3).toUpperCase()
+    return `${catCode}-${padded}`
+  }
+  return padded
+}
+
+export async function buscarProductosSimilaresMock(
+  _empresaId: string,
+  texto: string,
+  _umbral?: number
+): Promise<Array<{ id: string; nombre: string; sku: string; similitud: number }>> {
+  const state = readState()
+  if (!texto.trim()) return []
+  const lower = texto.toLowerCase()
+  return state.products
+    .filter((p) => p.sku)
+    .map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      sku: p.sku!,
+      similitud: p.nombre.toLowerCase().includes(lower) ? 0.9 : 0.2,
+    }))
+    .filter((r) => r.similitud >= (_umbral ?? 0.3))
+    .slice(0, 10)
+}
+
+export async function actualizarConfigSkuMock(
+  empresaId: string,
+  config: Partial<MockSkuConfig>
+): Promise<void> {
+  const existing = getMockSkuConfig(empresaId) ?? {
+    id: `sku-config-${Date.now()}`,
+    empresa_id: empresaId,
+    autogenerar_activo: false,
+    plantilla: 'solo_secuencial' as const,
+    usa_categoria: false,
+    modo_contador: 'global' as const,
+    longitud_secuencial: 4,
+    prefijo_manual: null,
+    umbral_similitud: 0.3,
+    creado_en: new Date().toISOString(),
+    actualizado_en: new Date().toISOString(),
+  }
+  persistMockSkuConfig(empresaId, {
+    ...existing,
+    ...config,
+    actualizado_en: new Date().toISOString(),
+  })
 }
 
 export async function autoImportarCatalogoLocal(): Promise<{ imported: number; categories: number } | null> {

@@ -1,15 +1,22 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import {
   crearProducto,
   actualizarProducto,
   subirImagenProducto,
-  verificarSkuDuplicado,
   verificarCodigoDuplicado,
+  registrarHistorial,
+  renombrarImagen,
   type Categoria,
   type Producto,
   type ProductoInput,
 } from '../lib/productos'
 import { obtenerMiEmpresaId } from '../lib/empresa'
+import { generarSku, buscarProductosSimilares } from '../lib/sku'
+import { useEmpresaConfig } from '../hooks/useEmpresaConfig'
+import { useSkuPreview } from '../hooks/useSkuPreview'
+import { useUsuarioRol } from '../hooks/useUsuarioRol'
+import { SkuPreview } from './SkuPreview'
+import { DuplicadoAlert } from './DuplicadoAlert'
 
 type Props = {
   producto: Producto | null
@@ -35,6 +42,48 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const { config } = useEmpresaConfig()
+  const { esAdmin } = useUsuarioRol()
+  const { skuPreview, generando: skuGenerando } = useSkuPreview(categoriaId || null)
+
+  const autogenerarActivo = config?.autogenerar_activo ?? false
+  const [autoGenEnabled, setAutoGenEnabled] = useState(autogenerarActivo)
+  const [similares, setSimilares] = useState<
+    Array<{ nombre: string; sku: string; similitud: number }>
+  >([])
+  const [showDuplicado, setShowDuplicado] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  const [confirmRegenerar, setConfirmRegenerar] = useState(false)
+
+  // When config loads, sync admin toggle default
+  useEffect(() => {
+    setAutoGenEnabled(autogenerarActivo)
+  }, [autogenerarActivo])
+
+  // Sync SKU preview into state when auto-gen is active
+  useEffect(() => {
+    if (autoGenEnabled && skuPreview) {
+      setSku(skuPreview)
+    }
+  }, [autoGenEnabled, skuPreview])
+
+  // On edit: if product already has SKU and auto-gen is active, keep it read-only
+  // (admin can uncheck to override)
+  const skuReadOnly =
+    esEdicion && producto?.sku
+      ? autoGenEnabled && !esAdmin
+      : autogenerarActivo && !esAdmin
+
+  const handleAutoGenToggle = useCallback(() => {
+    setAutoGenEnabled((prev) => {
+      const next = !prev
+      if (!next) {
+        setSku('')
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -43,8 +92,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function handleSubmit() {
     setError('')
     if (!nombre.trim()) {
       setError('El nombre es obligatorio')
@@ -52,9 +100,19 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     }
     setSaving(true)
     try {
+      let skuValue = sku.trim() || null
+
+      // Generate SKU if auto-gen is active
+      if (autoGenEnabled) {
+        const empresaId = await obtenerMiEmpresaId()
+        if (empresaId) {
+          skuValue = await generarSku(empresaId, categoriaId || undefined)
+        }
+      }
+
       const base: ProductoInput = {
         nombre: nombre.trim(),
-        sku: sku.trim() || null,
+        sku: skuValue,
         codigo_barras: codigoBarras.trim() || null,
         categoria_id: categoriaId || null,
         unidad: unidad.trim() || 'unidad',
@@ -64,12 +122,6 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
         stock_minimo: parseFloat(stockMinimo) || 0,
         activo,
         imagen_url: imagenUrl.trim() || null,
-      }
-      const skuExistente = await verificarSkuDuplicado(sku.trim() || null, esEdicion ? producto.id : null)
-      if (skuExistente) {
-        setError(`Ya existe un producto con el SKU "${sku.trim()}" en esta empresa.`)
-        setSaving(false)
-        return
       }
       const codExistente = await verificarCodigoDuplicado(codigoBarras.trim() || null, esEdicion ? producto.id : null)
       if (codExistente) {
@@ -115,113 +167,256 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     }
   }
 
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError('')
+
+    if (!nombre.trim()) {
+      setError('El nombre es obligatorio')
+      return
+    }
+
+    // Fuzzy duplicate check before submit (only when auto-gen active and not editing)
+    if (autoGenEnabled && !esEdicion && nombre.trim().length >= 3) {
+      try {
+        const empresaId = await obtenerMiEmpresaId()
+        if (empresaId && config?.umbral_similitud !== undefined) {
+          const encontrados = await buscarProductosSimilares(
+            empresaId,
+            nombre.trim(),
+            config.umbral_similitud
+          )
+          if (encontrados.length > 0) {
+            setSimilares(encontrados)
+            setShowDuplicado(true)
+            setSaving(false)
+            return
+          }
+        }
+      } catch {
+        // Fuzzy check failure is non-blocking — proceed with submit
+      }
+    }
+
+    await handleSubmit()
+  }
+
+  function handleDuplicadoConfirm() {
+    setShowDuplicado(false)
+    handleSubmit()
+  }
+
+  function handleDuplicadoCancel() {
+    setShowDuplicado(false)
+  }
+
+  async function handleRegenerarSku() {
+    setConfirmRegenerar(false)
+    if (!producto || !esEdicion) return
+    const empresaId = await obtenerMiEmpresaId()
+    if (!empresaId) return
+
+    setRegenerating(true)
+    setError('')
+    try {
+      const newSku = await generarSku(empresaId, producto.categoria_id || undefined)
+      if (!newSku) {
+        setError('No se pudo generar un nuevo SKU')
+        setRegenerating(false)
+        return
+      }
+
+      // Renombrar imagen si existe
+      if (producto.imagen_url && producto.sku) {
+        const ext = producto.imagen_url.split('.').pop()?.split('?')[0] || 'webp'
+        await renombrarImagen(empresaId, producto.sku, newSku, ext)
+      }
+
+      // Actualizar producto con el nuevo SKU
+      const guardado = await actualizarProducto(producto.id, {
+        nombre: producto.nombre,
+        sku: newSku,
+      })
+
+      // Registrar en historial
+      await registrarHistorial(empresaId, producto.id, producto.nombre, 'editado', {
+        campo: 'sku',
+        valor_anterior: producto.sku,
+        valor_nuevo: newSku,
+      })
+
+      setSku(newSku)
+      onSaved(guardado)
+    } catch (err) {
+      setError(`Error al regenerar SKU: ${(err as Error).message}`)
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-header">
-          <h2>{esEdicion ? 'Editar producto' : 'Nuevo producto'}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar">×</button>
-        </header>
-        <form onSubmit={onSubmit} className="form-grid">
-          <label className="span-2">
-            Nombre*
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
-          </label>
-          <label>
-            SKU
-            <input value={sku} onChange={(e) => setSku(e.target.value)} />
-          </label>
-          <label>
-            Código de barras
-            <input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} />
-          </label>
-          <label>
-            Categoría
-            <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)}>
-              <option value="">— sin categoría —</option>
-              {categorias.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Unidad
-            <input value={unidad} onChange={(e) => setUnidad(e.target.value)} />
-          </label>
-          <label>
-            Costo USD
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={costoUsd}
-              onChange={(e) => setCostoUsd(e.target.value)}
-            />
-          </label>
-          <label>
-            Precio USD*
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={precioUsd}
-              onChange={(e) => setPrecioUsd(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Stock actual
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={stockActual}
-              onChange={(e) => setStockActual(e.target.value)}
-            />
-          </label>
-          <label>
-            Stock mínimo
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={stockMinimo}
-              onChange={(e) => setStockMinimo(e.target.value)}
-            />
-          </label>
-          <label className="span-2">
-            URL de imagen
-            <input
-              value={imagenUrl}
-              onChange={(e) => setImagenUrl(e.target.value)}
-              placeholder="https://…"
-            />
-          </label>
-          <label className="span-2">
-            Subir imagen (opcional)
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-          <label className="check span-2">
-            <input
-              type="checkbox"
-              checked={activo}
-              onChange={(e) => setActivo(e.target.checked)}
-            />
-            Activo
-          </label>
+    <>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <header className="modal-header">
+            <h2>{esEdicion ? 'Editar producto' : 'Nuevo producto'}</h2>
+            <button type="button" onClick={onClose} aria-label="Cerrar">×</button>
+          </header>
+          <form onSubmit={onSubmit} className="form-grid">
+            <label className="span-2">
+              Nombre*
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+            </label>
+            <label>
+              {autogenerarActivo && !esAdmin
+                ? 'SKU (generado automáticamente)'
+                : 'SKU'}
+              <input
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                disabled={skuReadOnly}
+                readOnly={skuReadOnly}
+              />
+            </label>
+            {esAdmin && autogenerarActivo && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={autoGenEnabled}
+                  onChange={handleAutoGenToggle}
+                />
+                Auto-generar SKU
+              </label>
+            )}
+            <SkuPreview sku={autoGenEnabled ? skuPreview : null} generando={skuGenerando && autoGenEnabled} />
+            <label>
+              Código de barras
+              <input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} />
+            </label>
+            <label>
+              Categoría
+              <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)}>
+                <option value="">— sin categoría —</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Unidad
+              <input value={unidad} onChange={(e) => setUnidad(e.target.value)} />
+            </label>
+            <label>
+              Costo USD
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={costoUsd}
+                onChange={(e) => setCostoUsd(e.target.value)}
+              />
+            </label>
+            <label>
+              Precio USD*
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={precioUsd}
+                onChange={(e) => setPrecioUsd(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Stock actual
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={stockActual}
+                onChange={(e) => setStockActual(e.target.value)}
+              />
+            </label>
+            <label>
+              Stock mínimo
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={stockMinimo}
+                onChange={(e) => setStockMinimo(e.target.value)}
+              />
+            </label>
+            <label className="span-2">
+              URL de imagen
+              <input
+                value={imagenUrl}
+                onChange={(e) => setImagenUrl(e.target.value)}
+                placeholder="https://…"
+              />
+            </label>
+            <label className="span-2">
+              Subir imagen (opcional)
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <label className="check span-2">
+              <input
+                type="checkbox"
+                checked={activo}
+                onChange={(e) => setActivo(e.target.checked)}
+              />
+              Activo
+            </label>
           {error && <p className="error span-2">{error}</p>}
           <footer className="span-2 modal-footer">
-            <button type="button" onClick={onClose} disabled={saving}>Cancelar</button>
-            <button type="submit" className="primary" disabled={saving}>
+            {esEdicion && esAdmin && autogenerarActivo && producto?.sku && (
+              <button
+                type="button"
+                onClick={() => setConfirmRegenerar(true)}
+                disabled={saving || regenerating}
+                className="secondary"
+              >
+                {regenerating ? 'Regenerando…' : 'Regenerar SKU'}
+              </button>
+            )}
+            <button type="button" onClick={onClose} disabled={saving || regenerating}>Cancelar</button>
+            <button type="submit" className="primary" disabled={saving || regenerating}>
               {saving ? 'Guardando…' : esEdicion ? 'Guardar' : 'Crear'}
             </button>
           </footer>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+      {showDuplicado && similares.length > 0 && (
+        <DuplicadoAlert
+          similares={similares}
+          onConfirm={handleDuplicadoConfirm}
+          onCancel={handleDuplicadoCancel}
+        />
+      )}
+      {confirmRegenerar && (
+        <div className="modal-backdrop" onClick={() => setConfirmRegenerar(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <header className="modal-header">
+              <h2>Regenerar SKU</h2>
+              <button type="button" onClick={() => setConfirmRegenerar(false)} aria-label="Cerrar">×</button>
+            </header>
+            <p style={{ padding: '1rem' }}>
+              ¿Regenerar el SKU? El SKU actual quedará registrado en el historial.
+            </p>
+            <footer className="modal-footer" style={{ padding: '0 1rem 1rem' }}>
+              <button type="button" onClick={() => setConfirmRegenerar(false)}>Cancelar</button>
+              <button type="button" className="primary" onClick={handleRegenerarSku}>
+                Confirmar
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

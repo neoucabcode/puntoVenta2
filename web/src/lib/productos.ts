@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { obtenerMiEmpresaId } from './empresa'
+import { obtenerMiEmpresaId, obtenerMiUsuarioId } from './empresa'
 import {
   listarProductosMock,
   listarCategoriasMock,
@@ -9,7 +9,6 @@ import {
   reactivarProductoMock,
   crearCategoriaMock,
   subirImagenProductoMock,
-  verificarSkuDuplicadoMock,
   verificarCodigoDuplicadoMock,
 } from './mock-data'
 
@@ -53,6 +52,7 @@ export type ListarResult = {
 export type Categoria = {
   id: string
   nombre: string
+  codigo?: string | null
 }
 
 export type ProductoJoin = Producto & {
@@ -140,9 +140,17 @@ export async function crearProducto(input: ProductoInput): Promise<Producto> {
   if (!supabase) {
     return crearProductoMock(input) as Promise<Producto>
   }
+  // Aislamiento multi-tenant: el producto debe pertenecer a la empresa del
+  // usuario autenticado. La columna `empresa_id` es NOT NULL y la RLS
+  // `with check es_de_empresa` lo exige; sin esto el insert falla en runtime.
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) {
+    throw new Error('No se pudo determinar la empresa para crear el producto')
+  }
   const { data, error } = await supabase
     .from('producto')
     .insert({
+      empresa_id: empresaId,
       codigo_barras: input.codigo_barras ?? null,
       sku: input.sku ?? null,
       nombre: input.nombre,
@@ -218,9 +226,15 @@ export async function crearCategoria(nombre: string): Promise<Categoria> {
   if (!supabase) {
     return crearCategoriaMock(nombre)
   }
+  // Aislamiento multi-tenant: `empresa_id` es NOT NULL y la RLS lo exige en el
+  // insert de `categoria`. Sin esto el alta de categoría falla en runtime.
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) {
+    throw new Error('No se pudo determinar la empresa para crear la categoría')
+  }
   const { data, error } = await supabase
     .from('categoria')
-    .insert({ nombre })
+    .insert({ nombre, empresa_id: empresaId })
     .select('id,nombre')
     .single()
   if (error) throw error
@@ -230,13 +244,13 @@ export async function crearCategoria(nombre: string): Promise<Categoria> {
 export async function subirImagenProducto(
   file: File,
   empresaId: string,
-  productoId: string
+  sku: string
 ): Promise<string> {
   if (!supabase) {
-    return subirImagenProductoMock(file, empresaId, productoId)
+    return subirImagenProductoMock(file, empresaId, sku)
   }
   const ext = file.name.split('.').pop()?.toLowerCase() || 'webp'
-  const path = `${empresaId}/${productoId}.${ext}`
+  const path = `${empresaId}/${sku}.${ext}`
   const { error } = await supabase.storage
     .from('productos')
     .upload(path, file, { upsert: true, contentType: file.type })
@@ -245,23 +259,22 @@ export async function subirImagenProducto(
   return data.publicUrl
 }
 
-export async function verificarSkuDuplicado(
-  sku: string | null,
-  ignorarId?: string | null
-): Promise<boolean> {
-  if (!supabase) {
-    return verificarSkuDuplicadoMock(sku)
-  }
-  if (!sku) return false
-  let q = supabase
-    .from('producto')
-    .select('id')
-    .eq('sku', sku)
-    .limit(1)
-  if (ignorarId) q = q.neq('id', ignorarId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).length > 0
+export async function renombrarImagen(
+  empresaId: string,
+  oldSku: string,
+  newSku: string,
+  ext: string
+): Promise<void> {
+  if (!supabase) return
+  const bucket = supabase.storage.from('productos')
+  const oldPath = `${empresaId}/${oldSku}.${ext}`
+  const newPath = `${empresaId}/${newSku}.${ext}`
+  // Copiar archivo a nueva ubicación
+  const { error: copyError } = await bucket.copy(oldPath, newPath)
+  if (copyError) throw copyError
+  // Eliminar archivo antiguo
+  const { error: deleteError } = await bucket.remove([oldPath])
+  if (deleteError) throw deleteError
 }
 
 export async function verificarCodigoDuplicado(
@@ -281,4 +294,148 @@ export async function verificarCodigoDuplicado(
   const { data, error } = await q
   if (error) throw error
   return (data ?? []).length > 0
+}
+
+// Valuación total del inventario = Σ(costo × stock) del tenant.
+export function calcularValuacion(
+  productos: Array<{ costo_usd: number; stock_actual: number }>
+): number {
+  return productos.reduce((acc, p) => acc + (p.costo_usd * p.stock_actual), 0)
+}
+
+// Mapea el motivo legible del ajuste al `tipo` de `movimiento_inventario`.
+function mapearMotivoATipo(motivo: string): string {
+  if (motivo === 'merma') return 'merma'
+  if (motivo === 'devolución') return 'devolucion'
+  return 'ajuste'
+}
+
+export type HistorialEntry = {
+  id: string
+  empresa_id: string
+  producto_id: string | null
+  producto_nombre: string
+  accion: 'creado' | 'editado' | 'eliminado' | 'ajuste_stock'
+  detalles: Record<string, unknown>
+  usuario_id: string | null
+  creado_en: string
+}
+
+export async function eliminarProducto(id: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('La eliminación requiere conexión con la base de datos')
+  }
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) {
+    throw new Error('No se pudo determinar la empresa')
+  }
+  // Obtener sku e imagen_url antes de borrar la fila para limpiar Storage.
+  const { data: producto, error: fetchError } = await supabase
+    .from('producto')
+    .select('sku,imagen_url')
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+    .single()
+  if (fetchError) throw fetchError
+
+  // Si tiene imagen subida a Storage, eliminar el archivo.
+  if (producto?.imagen_url && producto?.sku) {
+    const ext = producto.imagen_url.split('.').pop()?.split('?')[0] || 'webp'
+    const filePath = `${empresaId}/${producto.sku}.${ext}`
+    const { error: storageError } = await supabase.storage
+      .from('productos')
+      .remove([filePath])
+    // Ignorar error 404 (archivo ya no existe) — solo lanzar errores reales.
+    if (storageError && storageError.message !== 'The resource was not found') {
+      throw storageError
+    }
+  }
+
+  const { error } = await supabase
+    .from('producto')
+    .delete()
+    .eq('id', id)
+    .eq('empresa_id', empresaId)
+  if (error) throw error
+}
+
+export async function registrarHistorial(
+  empresaId: string,
+  productoId: string | null,
+  productoNombre: string,
+  accion: string,
+  detalles: Record<string, unknown>
+): Promise<void> {
+  if (!supabase) return
+  const usuarioId = await obtenerMiUsuarioId()
+  void supabase
+    .from('producto_historial')
+    .insert({
+      empresa_id: empresaId,
+      producto_id: productoId,
+      producto_nombre: productoNombre,
+      accion,
+      detalles,
+      usuario_id: usuarioId,
+    })
+}
+
+export async function obtenerHistorial(
+  empresaId: string,
+  opts?: { productoId?: string; accion?: string; limit?: number }
+): Promise<HistorialEntry[]> {
+  if (!supabase) return []
+  let q = supabase
+    .from('producto_historial')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('creado_en', { ascending: false })
+    .limit(opts?.limit ?? 100)
+  if (opts?.productoId) q = q.eq('producto_id', opts.productoId)
+  if (opts?.accion) q = q.eq('accion', opts.accion)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as HistorialEntry[]
+}
+
+export type AjusteStockInput = {
+  productoId: string
+  /** Positivo para ingreso, negativo para egreso. Respeta RN-55 (stock negativo si la empresa lo permite). */
+  cantidad: number
+  /** Motivo legible: 'conteo físico' | 'merma' | 'devolución' | 'otro'. */
+  motivo: string
+  /** Idempotencia: si se reintenta el mismo ajuste, usar el mismo id_evento. */
+  idEvento?: string
+}
+
+/**
+ * Ajuste de stock con motivo y auditoría (RN-11). Inserta un
+ * `movimiento_inventario` y actualiza `stock_actual` vía RPC `aplicar_ajuste_stock`
+ * (security invoker). El `cantidad` se envía como número (no string) para evitar
+ * el mismatch cliente↔servidor de la deuda técnica de numeric.
+ */
+export async function aplicarAjusteStock(input: AjusteStockInput): Promise<void> {
+  if (!supabase) {
+    throw new Error('El ajuste de stock requiere conexión con la base de datos')
+  }
+  const empresaId = await obtenerMiEmpresaId()
+  const usuarioId = await obtenerMiUsuarioId()
+  if (!empresaId || !usuarioId) {
+    throw new Error('No se pudo determinar la empresa o el usuario para el ajuste')
+  }
+  const idEvento =
+    input.idEvento ??
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `ajuste-${Date.now()}-${Math.random()}`)
+  const { error } = await supabase.rpc('aplicar_ajuste_stock', {
+    p_id_evento: idEvento,
+    p_empresa_id: empresaId,
+    p_producto_id: input.productoId,
+    p_cantidad: input.cantidad,
+    p_tipo: mapearMotivoATipo(input.motivo),
+    p_motivo: input.motivo,
+    p_usuario_id: usuarioId,
+  })
+  if (error) throw error
 }

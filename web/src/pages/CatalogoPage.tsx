@@ -2,15 +2,11 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   listarProductos,
   listarCategorias,
-  desactivarProducto,
-  reactivarProducto,
-  crearCategoria,
   PAGE_SIZE,
   type ProductoJoin,
   type Categoria,
 } from '../lib/productos'
-import { importarCatalogoMock } from '../lib/mock-data'
-import { ProductoForm } from '../components/ProductoForm'
+import { obtenerCatalogo } from '../lib/cacheCatalogo'
 import { DataTable } from '../components/DataTable'
 
 export function CatalogoPage() {
@@ -23,10 +19,7 @@ export function CatalogoPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState('')
-  const [editId, setEditId] = useState<string | null>(null)
-  const [showNuevo, setShowNuevo] = useState(false)
-  const [nuevaCategoria, setNuevaCategoria] = useState('')
-  const [importando, setImportando] = useState(false)
+  const [usandoCache, setUsandoCache] = useState(false)
   const sentinelaRef = useRef<HTMLDivElement | null>(null)
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
@@ -34,6 +27,8 @@ export function CatalogoPage() {
   const cargandoRef = useRef(false)
   const [vista, setVista] = useState<'grid' | 'lista'>('grid')
 
+  // El catálogo es SOLO LECTURA de forma permanente (Slice 1): lista, búsqueda y
+  // filtrado. La edición de productos/categorías vive en `/inventario`.
   const cargarPagina = useCallback(
     async (reset: boolean) => {
       if (cargandoRef.current) return
@@ -46,13 +41,19 @@ export function CatalogoPage() {
       setError('')
       try {
         const offset = reset ? 0 : offsetRef.current
-        const res = await listarProductos({
-          search,
-          categoriaId: categoriaFiltro || null,
-          soloActivos,
-          offset,
-          pageSize: PAGE_SIZE,
-        })
+        // W1: usa la caché local cuando está offline o falla Supabase; marca
+        // `desdeCache` para mostrar el indicador de catálogo sin conexión.
+        const res = await obtenerCatalogo(
+          () =>
+            listarProductos({
+              search,
+              categoriaId: categoriaFiltro || null,
+              soloActivos,
+              offset,
+              pageSize: PAGE_SIZE,
+            }),
+          { guardarEnCache: reset }
+        )
         if (reset) {
           setProductos(res.items)
           offsetRef.current = res.items.length
@@ -61,8 +62,10 @@ export function CatalogoPage() {
           offsetRef.current += res.items.length
         }
         setHasMore(res.hasMore)
+        setUsandoCache(res.desdeCache)
       } catch (err) {
         setError((err as Error).message)
+        setUsandoCache(false)
       } finally {
         cargandoRef.current = false
         if (reset) {
@@ -85,10 +88,6 @@ export function CatalogoPage() {
       .catch((err) => setError((err as Error).message))
   }, [])
 
-  async function refrescar() {
-    await cargarPagina(true)
-  }
-
   useEffect(() => {
     const node = sentinelaRef.current
     if (!node) return
@@ -103,62 +102,6 @@ export function CatalogoPage() {
     obs.observe(node)
     return () => obs.disconnect()
   }, [hasMore, cargarPagina, vista])
-
-  async function onDesactivar(p: ProductoJoin) {
-    if (!confirm(`¿Desactivar "${p.nombre}"? Queda en el historial pero no se venderá más.`)) return
-    try {
-      await desactivarProducto(p.id)
-      setProductos((prev) =>
-        soloActivos ? prev.filter((x) => x.id !== p.id) : prev.map((x) => (x.id === p.id ? { ...x, activo: false } : x))
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  async function onReactivar(p: ProductoJoin) {
-    try {
-      await reactivarProducto(p.id)
-      setProductos((prev) => prev.map((x) => (x.id === p.id ? { ...x, activo: true } : x)))
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  async function onCrearCategoria() {
-    const n = nuevaCategoria.trim()
-    if (!n) return
-    try {
-      const c = await crearCategoria(n)
-      setCategorias((prev) => [...prev, c].sort((a, b) => a.nombre.localeCompare(b.nombre)))
-      setCategoriaFiltro(c.id)
-      setNuevaCategoria('')
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  async function onImportarCatalogo(file: File | null) {
-    if (!file) return
-    try {
-      setImportando(true)
-      const { imported, categories } = await importarCatalogoMock(file)
-      setError('')
-      setCategorias((prev) => {
-        const merged = [...prev]
-        merged.push(...(categories > 0 ? [] : []))
-        return merged
-      })
-      await refrescar()
-      setError(`Se importaron ${imported} productos y ${categories} categorías.`)
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setImportando(false)
-    }
-  }
-
-  const edicion = editId ? productos.find((p) => p.id === editId) ?? null : null
 
   function stockEstado(p: ProductoJoin): 'ok' | 'warn' | 'off' {
     if (!p.activo) return 'off'
@@ -176,7 +119,6 @@ export function CatalogoPage() {
     <div className="catalogo">
       <header className="catalogo-toolbar">
         <div className="catalogo-head">
-          <h2 className="catalogo-title">Catálogo de productos</h2>
           <p className="catalogo-sub">
             {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
           </p>
@@ -193,17 +135,6 @@ export function CatalogoPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          <details className="nueva-cat">
-            <summary>+ Nueva categoría</summary>
-            <div className="row">
-              <input
-                placeholder="Nombre"
-                value={nuevaCategoria}
-                onChange={(e) => setNuevaCategoria(e.target.value)}
-              />
-              <button onClick={onCrearCategoria}>Crear</button>
-            </div>
-          </details>
         </div>
         <div className="catalogo-head-actions">
           <input
@@ -234,31 +165,15 @@ export function CatalogoPage() {
               title="Lista"
             ><span className="material-symbols-outlined">list</span></button>
           </div>
-          <label className="import-button">
-            <input
-              type="file"
-              accept=".json,.csv"
-              onChange={(e) => {
-                const file = e.target.files?.[0] ?? null
-                if (file) {
-                  void onImportarCatalogo(file)
-                }
-                e.target.value = ''
-              }}
-              disabled={importando}
-            />
-            <span className="material-symbols-outlined">upload_file</span>
-            {importando ? 'Importando…' : 'Importar catálogo'}
-          </label>
-          <button className="primary" onClick={() => setShowNuevo(true)}>
-            <span className="material-symbols-outlined">add</span> Nuevo producto
-          </button>
         </div>
       </header>
 
       <div className="catalogo-body">
         <main className="catalogo-main">
-          {error && <p className="error">{error}</p>}
+           {error && <p className="error">{error}</p>}
+           {usandoCache && (
+             <p className="aviso-cache">catálogo sin conexión (cached)</p>
+           )}
 
           {loading ? (
             <p>Cargando…</p>
@@ -298,20 +213,6 @@ export function CatalogoPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="card-actions">
-                        <button onClick={() => setEditId(p.id)}>
-                          <span className="material-symbols-outlined">edit</span> Editar
-                        </button>
-                        {p.activo ? (
-                          <button onClick={() => onDesactivar(p)}>
-                            <span className="material-symbols-outlined">delete</span> Desactivar
-                          </button>
-                        ) : (
-                          <button onClick={() => onReactivar(p)}>
-                            <span className="material-symbols-outlined">check_circle</span> Reactivar
-                          </button>
-                        )}
-                      </div>
                     </article>
                   )
                 })}
@@ -347,25 +248,6 @@ export function CatalogoPage() {
                   key: 'estado', titulo: 'Estado',
                   render: (p: ProductoJoin) => <span className={`badge ${stockEstado(p)}`}>{stockLabel[stockEstado(p)]}</span>,
                 },
-                {
-                  key: 'acciones', titulo: '', hideHeader: true, className: 'dt-actions',
-                  render: (p: ProductoJoin) => (
-                    <>
-                      <button onClick={() => setEditId(p.id)} title="Editar">
-                        <span className="material-symbols-outlined">edit</span>
-                      </button>
-                      {p.activo ? (
-                        <button onClick={() => onDesactivar(p)} title="Desactivar">
-                          <span className="material-symbols-outlined">delete</span>
-                        </button>
-                      ) : (
-                        <button onClick={() => onReactivar(p)} title="Reactivar">
-                          <span className="material-symbols-outlined">check_circle</span>
-                        </button>
-                      )}
-                    </>
-                  ),
-                },
               ]}
               filas={productos}
               rowKey={(p) => p.id}
@@ -379,22 +261,6 @@ export function CatalogoPage() {
           {loadingMore && <p className="loading-more">Cargando más…</p>}
         </main>
       </div>
-
-      {(showNuevo || edicion) && (
-        <ProductoForm
-          producto={edicion}
-          categorias={categorias}
-          onClose={() => {
-            setShowNuevo(false)
-            setEditId(null)
-          }}
-          onSaved={() => {
-            setShowNuevo(false)
-            setEditId(null)
-            refrescar()
-          }}
-        />
-      )}
     </div>
   )
 }

@@ -15,9 +15,115 @@
 ## Proyecto
 Sistema de punto de venta para ferretería bimonetaria (Venezuela: BS / USD). Carpeta:
 `C:\Proyectos\puntoVenta2`. Empresa del dueño: **FerrehogarMart**
-(id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`).
+(id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`). Modelo SaaS multi-tenant.
 
-## Estado actual (última actualización: 2026-07-20, sesión de reestructura de catálogo)
+## Arquitectura de tenants y roles (decisión 2026-07-22)
+
+### Qué es un tenant
+Un tenant = una empresa. Cada empresa tiene un `empresa_id` único. Los datos están
+**aislados** con Row Level Security (RLS) en Supabase. Un usuario de FerrehogarMart
+nunca ve los datos de "El Martillo" ni viceversa.
+
+### Roles (3 niveles)
+
+| Rol | Quién es | Qué puede hacer | Cómo se asigna |
+|---|---|---|---|
+| **Super Admin** | Vos (dueño de la plataforma) | Ve todo: todas las empresas, todos los datos. Configura la plataforma, crea el catálogo semilla. NO interviene en apps de otros a menos que le pidan soporte. | Acceso directo a Supabase (hoy no hay UI para esto) |
+| **Admin de empresa** | Dueño de "El Martillo" (cada empresa tiene hasta 2) | Gestiona SU empresa: usuarios, productos (inventario CRUD), caja, configuración. Asigna roles a sus empleados. | El super admin crea la empresa y le da acceso inicial; el admin gestiona lo demás |
+| **Vendedor** | Empleado de "El Martillo" | Vende (caja), ve catálogo (solo lectura). NO ve inventario, NO ve configuración. Operación limitada a su turno. | El admin de empresa le crea usuario y asigna rol `vendedor` |
+
+### Flujo de una nueva empresa
+```
+1. Super admin (vos) crea la cuenta de "El Martillo" en Supabase
+   → le asigna empresa_id único
+   → le carga el catálogo semilla (lo que elija)
+
+2. Dueño de "El Martillo" entra a la app
+   → ve SU inventario (aislado)
+   → crea usuarios para sus empleados
+   → les asigna rol: "admin" o "vendedor"
+
+3. Empleados de "El Martillo" entran
+   → cada uno ve solo lo que le corresponde
+
+4. Vos no ves nada de "El Martillo" a menos que:
+   → él te pida soporte
+   → uses el super admin para verificar algo
+```
+
+### Estado actual de implementación
+- ✅ RLS por `empresa_id` activo (aislamiento de datos)
+- ✅ Gate de inventario: solo `rol = 'admin'` accede
+- ✅ `obtenerMiRol()` + `useUsuarioRol()` para control de acceso
+- ❌ **No hay UI de super admin** (panel para gestionar todas las empresas)
+- ❌ **No hay UI de configuración de empresa** (SkuConfigForm existe pero no tiene acceso)
+
+## Estado actual (última actualización: 2026-07-21, sesión de SKU configurable + limpieza duplicados)
+
+### Limpieza de duplicados (2026-07-21)
+- **Auditoría del Excel:** 4 grupos de duplicados exactos encontrados (8 productos).
+- **Limpiados del Excel y de Supabase:**
+  - FILTRO ROSCA 1/4 162 → quedó REF0015 (borrado REF0014)
+  - FILTRO ROSCA 3/8 163 → quedó REF0019 (borrado REF0018)
+  - FILTRO ROSCA 5/8 165 → quedó REF0022 (borrado REF0021)
+  - LLAVE PLASTICA DISPENSADOR → quedó FER0029 (borrado FER0030)
+- **Sync ejecutado:** 580 productos del Excel → 582 en BD (19 insertados, 22 actualizados, 59 imágenes subidas forzado).
+- **Estado BD:** 582 productos, 8 categorías, 130 con imagen.
+- Scripts de auditoría en `supabase/audit_duplicates.py`, `audit_fuzzy.py`, `cleanup_duplicates.py`, `verify_sync.py` (pueden borrarse después).
+
+### SKU Configurable + Fuzzy Matching (2026-07-21 — implementado, NO aplicado a BD)
+> **Cambio SDD `sku-configurable`** — generación automática de SKU configurable por empresa,
+> fuzzy matching para prevenir duplicados, y convención de imagen por SKU.
+
+#### Qué se hizo
+- **Spec + Design + Tasks** en `openspec/changes/sku-configurable/`
+- **SQL:** `supabase/patch_11_sku_configurable.sql` (CREADO, PENDIENTE DE APLICAR)
+  - Tabla `empresa_configuracion_sku` (config por empresa)
+  - Tabla `empresa_sku_contador` (contadores atómicos)
+  - Columna `categoria.codigo` (char 3)
+  - Índice único SKU por empresa (partial, ignora nulls)
+  - Índice trigram GiST en `producto.nombre`
+  - RPC `generar_sku` (contador atómico + 3 plantillas)
+  - RPC `buscar_productos_similares` (pg_trgm, umbral configurable)
+  - Trigger `trg_config_sku_default` (config por defecto al crear empresa)
+- **Frontend:**
+  - `web/src/lib/sku.ts` — capa API (config, generación, fuzzy)
+  - `web/src/hooks/useEmpresaConfig.ts` — hook de config
+  - `web/src/hooks/useSkuPreview.ts` — preview debounce de SKU
+  - `web/src/components/SkuPreview.tsx` — badge de SKU
+  - `web/src/components/DuplicadoAlert.tsx` — modal de alerta duplicados
+  - `web/src/components/SkuConfigForm.tsx` — form de config (admin)
+  - `web/src/components/ProductoForm.tsx` — integrado con auto-gen, fuzzy, read-only
+  - `web/src/lib/productos.ts` — rutas imagen por SKU, renombrar, limpieza delete
+  - `web/src/lib/mock-data.ts` — mocks para offline
+  - `web/src/index.css` — estilos nuevos
+
+#### Plantillas soportadas
+| Plantilla | Ejemplo | Requiere categoría |
+|---|---|---|
+| `categoria_secuencial` | `COC0001` | Sí |
+| `solo_secuencial` | `00001` | No |
+| `prefijo_fijo_secuencial` | `TIENDA-0001` | No |
+
+#### Pendiente
+1. **Aplicar `patch_11_sku_configurable.sql`** en Supabase (el usuario lo corre manualmente)
+2. **Commitear** los cambios (8 archivos nuevos, 4 modificados, ~950 líneas)
+3. **Crear rama** para el PR (o commitear en la rama actual)
+4. **Verificación manual** de los flujos en la app
+
+#### Decisiones tomadas
+- **No se migran productos existentes** — la config aplica solo a productos nuevos
+- **SKU manual sigue funcionando** cuando `autogenerar_activo = false`
+- **Editor de imágenes postergado** — queda el upload actual (file picker)
+- **Columna `categoria.codigo` descartada por ahora** — se agrega si otra empresa la necesita
+- **Convención de imagen:** se mantiene `{empresa_id}/{productoId}.{ext}` por ahora (la spec proponía `{empresa_id}/{sku}.webp` pero hay productos existentes sin SKU)
+
+#### Verificación
+- `tsc --noEmit`: 0 errores
+- `npm test`: 56/56 pasan
+- `npm run build`: exit 0
+
+## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
 ### Decisión de arquitectura del catálogo (SESÍÓN 2026-07-20 — manda sobre lo viejo)
 - **Fuente de datos del catálogo = un Excel en Drive**, NO la app todavía.
@@ -62,6 +168,91 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - El frontend carga imágenes desde `producto.imagen_url` (Supabase Storage), NO desde archivos estáticos.
 - `web/public/catalogo/` fue ELIMINADO (era basura estática no usada).
 
+## Modo Caja Offline (V1, 2026-07-20)
+
+> **Qué es:** la app ahora vende sin internet. Cualquier equipo autorizado abre sesión de caja por
+> dispositivo y vende offline; al volver la red, la cola se sincroniza sola. Equipos sin caja abierta
+> solo consultan el catálogo. Cambio SDD completo y **archivado** (sin CRITICAL; WARNINGs W1/W2/W4
+> cerrados). Documentación viva en `openspec/changes/modo-caja-offline/`
+> (`proposal.md`, `specs/REQ-1..4`, `design.md`, `tasks.md`, `verify-report*.md`, `archive-report.md`).
+
+### Cómo funciona
+- **Sesión por dispositivo (REQ-1):** `crypto.randomUUID()` persistido en `localStorage` (`pv-device-id`).
+  `abrirCaja`/`cerrarCaja` en `web/src/lib/caja.ts`. Si el admin deshabilita la caja (RN-53), la venta
+  opera sin sesión de caja.
+- **Cola IndexedDB (REQ-3):** `web/src/lib/colaOffline.ts` guarda cada venta como evento inmutable en
+  `ventas_pendientes` (clave `id_evento`, offline-first) ANTES de tocar la red. `id_evento` idempotente.
+- **Auto-sync silencioso (REQ-4):** `web/src/lib/autoSync.ts` detecta offline→online + heartbeat y sube
+  la cola vía RPC `aplicar_venta_offline` (upsert por PK, `security invoker`); reintenta con backoff
+  exponencial y **no duplica**. Estado en `web/src/store/useCajaStore.ts`; badge de pendientes en `Layout.tsx`.
+- **Catálogo solo-lectura (REQ-2) — SUPERADO por rediseño 2026-07-20:** en el cambio `rediseno-ui-caja-inventario`,
+  `CatalogoPage` es **permanentemente solo lectura** (sin Crear/Editar/Borrar/Vender, sin depender del estado de
+  caja). La edición de productos vive en la nueva página `/inventario` (admin-gated, estilo Fina). `web/src/lib/cacheCatalogo.ts`
+  sigue sirviendo el catálogo desde caché IndexedDB sin red.
+- **Stock = auditoría:** la venta offline registra `movimiento_stock` causa `venta_offline` (RN-11) y
+  **nunca bloquea** la venta (RN-54/55).
+
+### SQL aplicado (patch_08)
+- `openspec/changes/modo-caja-offline/patch_08_sesion_caja.sql` **YA APLICADO por el usuario** en Supabase
+  (tablas `sesion_caja` + `venta_offline_event` y RPC `aplicar_venta_offline` vivos). Rollback aditivo:
+  dropear función/tablas no rompe el esquema actual.
+
+### ⚠️ Pendiente del usuario (no es bug)
+- **Prueba manual de idempotencia en Supabase:** seguir `openspec/changes/modo-caja-offline/SQL_ACCION_USUARIO.md`.
+  El agente no tiene credenciales, así que el reintento real en servidor no se ejecutó en automatizado.
+  Esperado: `aplicar_venta_offline('evt-verificacion-001', ...)` → `insertado=true` la 1ª vez, `false` la
+  2ª, y **1 sola fila** en `venta_offline_event`. Si difiere, es bug de SQL y se reporta antes de producción.
+
+### Verificación y ramas
+- `web/` → `npm test`: **56/56 pass** (Vitest + happy-dom + fake-indexeddb + RTL). `npm run build`: exit 0.
+  (Subió 18→44 en Slice 1 y 44→56 en Slice 2 del cambio `rediseno-ui-caja-inventario`.)
+- Ramas (sin push, stacked): `modo-caja-offline/1-foundacion` → `2-libs` → `3-ui` → `4-fixes`.
+  El orchestrator decidirá push/PR.
+
+### Relación con la deuda técnica
+- V1 **no** corrige la fuga Storage multi-tenant, `confirm()` nativo ni paginación falsa (fuera de scope).
+- La caché de catálogo offline lee imágenes por `imagen_url` (Supabase Storage); no cambia la política de Storage.
+
+## Rediseño UI estilo Fina (2026-07-20)
+
+> **Cambio SDD `rediseno-ui-caja-inventario`** — separar edición de productos de la caja y rediseñar la UI
+> "estilo Fina" (fidelidad alta, no maquillaje). Proposal/specs/design/tasks en
+> `openspec/changes/rediseno-ui-caja-inventario/`. Faseado en 6 slices (16 PRs <400 líneas).
+
+### Decisiones del usuario
+- Nav de 3: Venta (caja) · Catálogo (solo lectura) · Inventario (edición, nueva).
+- Catálogo 100% solo lectura (sin editar ni vender).
+- Inventario estilo Fina: CRUD + categorías + ajuste de stock (RN-11) + alerta bajo stock + valuación, **solo admin**
+  (rol en `usuario`).
+- Caja estilo Fina COMPLETA menos cajón: UX carrito/tasa/métodos, pagos combinados, cliente→cxc, devoluciones,
+  presupuestos, hardware (lector+impresora). Offline multi-dispositivo PRESERVADO siempre.
+
+### Progreso
+- **Slice 1 (MVP separación UI):** DONE + VERIFY PASS. Nav 3, CatalogoPage read-only, InventarioPage admin-gated
+  (CRUD+categorías+ajuste stock+valuación+alerta), gate rol (`obtenerMiRol`+`useUsuarioRol`). Corregido CRITICAL
+  C1/C2 (empresa_id en `crearProducto`/`crearCategoria`). Rama `rediseno-ui/1-ui-sep`.
+- **Slice 2 (Caja UX Fina):** DONE + refactorado a **flujo de 2 pantallas** (estilo Fina real).
+  - Pantalla 1: catálogo + carrito lateral, botón "Cobrar — $XX.XX".
+  - Pantalla 2: pago consolidado (resumen productos + cliente opcional + método contado/crédito + instrumentos + confirmar).
+  - Eliminado wizard de 5 pasos. Carrito 100% presentacional. Éxito inline con auto-reset.
+  - Componentes eliminados: WizardStepper, ClienteForm, PagoForm, ResumenFinal, SuccessScreen.
+  - Offline intacto. Rama `rediseno-ui/2-caja-ux`.
+- **Slices 3-6:** PENDIENTES (pagos combinados+cliente+cxc / devoluciones / presupuestos / hardware).
+
+### ⚠️ Pendiente del usuario (no es bug)
+- **W1:** aplicar `supabase/patch_09_inventario.sql` (RPC `aplicar_ajuste_stock` + columna `empresa.logo_url`).
+  Hasta entonces el ajuste de stock falla en runtime.
+- **W2:** `UPDATE usuario SET rol = 'admin' WHERE id = '<tu_user_id>'` para que Inventario funcione en producción
+  (en dev el gate tiene fallback rol null→admin con warning).
+
+### SQL
+- `patch_08` (sesion_caja, aplicar_venta_offline) sigue aplicado en BD; ojo: NO está en `supabase/` del repo.
+- `patch_09_inventario.sql` creado en repo, PENDIENTE de aplicar por el usuario.
+
+### Ramas (PUSHEADAS a origin, tracking `master`, stacked-to-main)
+- `rediseno-ui/1-ui-sep` (Slice 1) → `rediseno-ui/2-caja-ux` (Slice 2). PRs target `master`.
+- ⚠️ Usuario tiene dudas abiertas sobre el rediseño (a clarificar la próxima sesión).
+
 ## Deuda técnica real (auditoría 2026-07-19, vigente)
 - 🔴 **Fuga de Storage multi-tenant** — `schema_fase2.sql` (`productos_public_read`) expone objetos
   sin chequear `es_de_empresa`. Hoy cualquier empresa podría leer imágenes de otra. Postergado
@@ -79,6 +270,28 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
    `G:\Mi unidad\puntoVenta2Tabla\imagenes\` y corre `sync_desde_excel.py` para subirlas.
 3. **Aplicar `patch_05` (storage writes)** y confirmar `patch_06`/`patch_07` en Supabase.
 4. **Llevar lenguaje visual del catálogo a Login/Registro/Venta** para consistencia.
+
+## Rol del Excel (decisión 2026-07-22)
+El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una fuente viva.
+- **Estado:** ✅ DATOS COMPLETADOS (2026-07-22). Todos los productos ya están en Supabase.
+  El Excel se da por terminado para edición de datos. No se corre más `sync_desde_excel.py`.
+- **Único pendiente:** imágenes. El usuario va agregando `{sku}.webp` a la carpeta de Drive
+  y las sube manualmente cuando las tenga.
+- **Producción:** el Excel se ignora. La app (Supabase) es la única fuente de verdad.
+- **No hay sincronización inversa** (app → Excel). Si se edita un producto en la app, el Excel
+  no se actualiza.
+- **Pendiente futuro:** feature "Catálogo semilla" para onboarding de nuevos tenants
+  (ver sección abajo).
+
+## Catálogo semilla — onboarding de nuevos tenants (idea 2026-07-22)
+Cuando una nueva empresa instala la app por primera vez, recibe el catálogo semilla
+(los ~582 productos de ferretería) como punto de partida. La empresa puede elegir:
+- **Categorías:** cargar todo, o seleccionar categorías específicas.
+- **SKU:** conservar los códigos originales, o pedir que la app genere SKU nuevos.
+- **Imágenes:** incluir las imágenes del catálogo semilla, o omitirlas (las sube después).
+
+Una vez que la empresa confirma la carga, los productos se insertan en Supabase con su
+`empresa_id` y el catálogo semilla ya no le importa. La app es su fuente de verdad.
 
 ## Cómo retomar al abrir sesión nueva (CHECKLIST para el asistente)
 1. Leer este `HANDOFF.md` (palabra clave "matrix").

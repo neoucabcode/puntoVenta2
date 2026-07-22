@@ -1,0 +1,6 @@
+project: puntoVenta2
+stack:
+  frontend: react+vite+typescript
+  backend: supabase
+  database: postgresql
+change_dir: openspec/changes/sku-configurable
