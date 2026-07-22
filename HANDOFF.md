@@ -58,70 +58,60 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - ❌ **No hay UI de super admin** (panel para gestionar todas las empresas)
 - ❌ **No hay UI de configuración de empresa** (SkuConfigForm existe pero no tiene acceso)
 
-## Estado actual (última actualización: 2026-07-21, sesión de SKU configurable + limpieza duplicados)
+## Deployment (producción)
+- **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
+- **Rama deployada:** `master`
+- **Build command:** `cd web && npm install && npm run build`
+- **Publish directory:** `web/dist`
+- **Variables de entorno:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (configuradas en Netlify dashboard)
+- **RLS:** activo, aislamiento por empresa_id
+- **PWA:** sí (service worker + manifest)
 
-### Limpieza de duplicados (2026-07-21)
-- **Auditoría del Excel:** 4 grupos de duplicados exactos encontrados (8 productos).
-- **Limpiados del Excel y de Supabase:**
-  - FILTRO ROSCA 1/4 162 → quedó REF0015 (borrado REF0014)
-  - FILTRO ROSCA 3/8 163 → quedó REF0019 (borrado REF0018)
-  - FILTRO ROSCA 5/8 165 → quedó REF0022 (borrado REF0021)
-  - LLAVE PLASTICA DISPENSADOR → quedó FER0029 (borrado FER0030)
-- **Sync ejecutado:** 580 productos del Excel → 582 en BD (19 insertados, 22 actualizados, 59 imágenes subidas forzado).
+### Snapshot de BD (2026-07-22)
+| Productos | Con imagen | Categorías | Usuarios | Admins | Cajas abiertas | Ventas pendientes |
+|-----------|-----------|------------|----------|--------|----------------|-------------------|
+| 589 | 262 | 8 | 1 | 1 | 0 | 0 |
+
+> Correr este query al inicio de cada sesión para mantener al día al asistente:
+> ```sql
+> SELECT 
+>   (SELECT COUNT(*) FROM producto) AS productos_total,
+>   (SELECT COUNT(*) FROM producto WHERE imagen_url IS NOT NULL) AS productos_con_imagen,
+>   (SELECT COUNT(*) FROM categoria) AS categorias,
+>   (SELECT COUNT(*) FROM usuario) AS usuarios,
+>   (SELECT COUNT(*) FROM usuario WHERE rol = 'admin') AS admins,
+>   (SELECT COUNT(*) FROM sesion_caja WHERE estado = 'abierta') AS cajas_abiertas,
+>   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
+> ```
+
+## Estado actual (última actualización: 2026-07-22, merge a master + deploy Netlify)
+
+### Producción desplegada
+- **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
+- **URL:** `https://flourishing-chebakia-0d56e1.netlify.app`
+- **Rama deployada:** `master`
+- **Build:** `cd web && npm install && npm run build`
+- **Publish:** `web/dist`
+- **Variables de entorno:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (configuradas en Netlify dashboard)
+- **RLS:** activo, aislamiento por `empresa_id`
+- **PWA:** sí (service worker + manifest)
+
+### Módulos completados y mergados
+- **Slices 1-2 del rediseño UI:** DONE. Nav 3 secciones (Venta/Catálogo/Inventario), Catálogo solo lectura, Inventario CRUD admin-gated con ajuste stock + valuación + alerta, Caja UX estilo Fina (flujo 2 pantallas). Offline intacto.
+- **SKU Configurable:** DONE. Generación automática por empresa, fuzzy matching, 3 plantillas. `patch_11_sku_configurable.sql` aplicado en BD.
+- **Modo Caja Offline V1:** DONE. Sesión por dispositivo, cola IndexedDB, auto-sync silencioso, idempotencia. `patch_08` aplicado en BD.
 - **Estado BD:** 582 productos, 8 categorías, 130 con imagen.
-- Scripts de auditoría en `supabase/audit_duplicates.py`, `audit_fuzzy.py`, `cleanup_duplicates.py`, `verify_sync.py` (pueden borrarse después).
 
-### SKU Configurable + Fuzzy Matching (2026-07-21 — implementado, NO aplicado a BD)
-> **Cambio SDD `sku-configurable`** — generación automática de SKU configurable por empresa,
-> fuzzy matching para prevenir duplicados, y convención de imagen por SKU.
+### Pendiente (Slices 3-6 del rediseño UI)
+- **Slice 3:** Pagos combinados + cliente + cuenta corriente
+- **Slice 4:** Devoluciones
+- **Slice 5:** Presupuestos
+- **Slice 6:** Hardware (lector + impresora)
+- Documentación del cambio en `openspec/changes/rediseno-ui-caja-inventario/`
 
-#### Qué se hizo
-- **Spec + Design + Tasks** en `openspec/changes/sku-configurable/`
-- **SQL:** `supabase/patch_11_sku_configurable.sql` (CREADO, PENDIENTE DE APLICAR)
-  - Tabla `empresa_configuracion_sku` (config por empresa)
-  - Tabla `empresa_sku_contador` (contadores atómicos)
-  - Columna `categoria.codigo` (char 3)
-  - Índice único SKU por empresa (partial, ignora nulls)
-  - Índice trigram GiST en `producto.nombre`
-  - RPC `generar_sku` (contador atómico + 3 plantillas)
-  - RPC `buscar_productos_similares` (pg_trgm, umbral configurable)
-  - Trigger `trg_config_sku_default` (config por defecto al crear empresa)
-- **Frontend:**
-  - `web/src/lib/sku.ts` — capa API (config, generación, fuzzy)
-  - `web/src/hooks/useEmpresaConfig.ts` — hook de config
-  - `web/src/hooks/useSkuPreview.ts` — preview debounce de SKU
-  - `web/src/components/SkuPreview.tsx` — badge de SKU
-  - `web/src/components/DuplicadoAlert.tsx` — modal de alerta duplicados
-  - `web/src/components/SkuConfigForm.tsx` — form de config (admin)
-  - `web/src/components/ProductoForm.tsx` — integrado con auto-gen, fuzzy, read-only
-  - `web/src/lib/productos.ts` — rutas imagen por SKU, renombrar, limpieza delete
-  - `web/src/lib/mock-data.ts` — mocks para offline
-  - `web/src/index.css` — estilos nuevos
-
-#### Plantillas soportadas
-| Plantilla | Ejemplo | Requiere categoría |
-|---|---|---|
-| `categoria_secuencial` | `COC0001` | Sí |
-| `solo_secuencial` | `00001` | No |
-| `prefijo_fijo_secuencial` | `TIENDA-0001` | No |
-
-#### Pendiente
-1. **Aplicar `patch_11_sku_configurable.sql`** en Supabase (el usuario lo corre manualmente)
-2. **Commitear** los cambios (8 archivos nuevos, 4 modificados, ~950 líneas)
-3. **Crear rama** para el PR (o commitear en la rama actual)
-4. **Verificación manual** de los flujos en la app
-
-#### Decisiones tomadas
-- **No se migran productos existentes** — la config aplica solo a productos nuevos
-- **SKU manual sigue funcionando** cuando `autogenerar_activo = false`
-- **Editor de imágenes postergado** — queda el upload actual (file picker)
-- **Columna `categoria.codigo` descartada por ahora** — se agrega si otra empresa la necesita
-- **Convención de imagen:** se mantiene `{empresa_id}/{productoId}.{ext}` por ahora (la spec proponía `{empresa_id}/{sku}.webp` pero hay productos existentes sin SKU)
-
-#### Verificación
-- `tsc --noEmit`: 0 errores
-- `npm test`: 56/56 pasan
-- `npm run build`: exit 0
+### Pendiente del usuario
+- ✅ **W1:** `patch_09_inventario.sql` — APLICADO.
+- ✅ **W2:** Rol admin asignado.
 
 ## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
@@ -155,12 +145,16 @@ nunca ve los datos de "El Martillo" ni viceversa.
 Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERVICE_ROLE=...`).
 **Está en `.gitignore`, NUNCA se commitea.** El asistente no corre comandos con la secret key.
 
-### Parches SQL (histórico, aplicados hasta patch_04; patch_05..07 pendientes de confirmar)
+### Parches SQL (histórico)
 - `schema_fase2.sql` — esquema físico (YA APLICADO).
 - `patch_01..04` — aplicados (alta, revokes definer, clonar/stock).
-- `patch_05_storage_writes.sql` — CREADO, pendiente de aplicar (desbloquea upload real de imágenes; hoy el sync usa service_role que bypasea RLS, así que sube igual).
-- `patch_06_sku_unico.sql` — índices únicos parciales sku/código. Pendiente de confirmar aplicado.
-- `patch_07_buscar_productos_rpc.sql` — RPC `buscar_productos` (BIEN tipado, `security invoker`).
+- `patch_05_storage_writes.sql` — ✅ APLICADO (storage writes para imágenes).
+- `patch_06_sku_unico.sql` — ✅ APLICADO (índices únicos parciales sku/código).
+- `patch_07_buscar_productos_rpc.sql` — ✅ APLICADO (RPC `buscar_productos`, `security invoker`).
+- `patch_08` — ✅ APLICADO (sesion_caja + venta_offline_event + RPC aplicar_venta_offline).
+- `patch_09_inventario.sql` — ✅ APLICADO (aplicar_ajuste_stock + empresa.logo_url).
+- `patch_10_producto_historial.sql` — ✅ APLICADO (producto_historial + RLS).
+- `patch_11_sku_configurable.sql` — ✅ APLICADO (empresa_configuracion_sku, counters, RPCs).
   El error histórico "structure does not match" era MITO: era bug frontend `numeric`→`string`, ya resuelto.
 
 ### App (frontend)
@@ -193,7 +187,7 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
   **nunca bloquea** la venta (RN-54/55).
 
 ### SQL aplicado (patch_08)
-- `openspec/changes/modo-caja-offline/patch_08_sesion_caja.sql` **YA APLICADO por el usuario** en Supabase
+- `openspec/changes/modo-caja-offline/patch_08_sesion_caja.sql` **YA APLICADO** en Supabase
   (tablas `sesion_caja` + `venta_offline_event` y RPC `aplicar_venta_offline` vivos). Rollback aditivo:
   dropear función/tablas no rompe el esquema actual.
 
@@ -206,8 +200,7 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 ### Verificación y ramas
 - `web/` → `npm test`: **56/56 pass** (Vitest + happy-dom + fake-indexeddb + RTL). `npm run build`: exit 0.
   (Subió 18→44 en Slice 1 y 44→56 en Slice 2 del cambio `rediseno-ui-caja-inventario`.)
-- Ramas (sin push, stacked): `modo-caja-offline/1-foundacion` → `2-libs` → `3-ui` → `4-fixes`.
-  El orchestrator decidirá push/PR.
+- **Merge a master completado.** Feature branches eliminadas (`modo-caja-offline/*`, `rediseno-ui/1-ui-sep`). Queda `rediseno-ui/2-caja-ux` (remoto).
 
 ### Relación con la deuda técnica
 - V1 **no** corrige la fuga Storage multi-tenant, `confirm()` nativo ni paginación falsa (fuera de scope).
@@ -245,13 +238,10 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - **W2:** `UPDATE usuario SET rol = 'admin' WHERE id = '<tu_user_id>'` para que Inventario funcione en producción
   (en dev el gate tiene fallback rol null→admin con warning).
 
-### SQL
-- `patch_08` (sesion_caja, aplicar_venta_offline) sigue aplicado en BD; ojo: NO está en `supabase/` del repo.
-- `patch_09_inventario.sql` creado en repo, PENDIENTE de aplicar por el usuario.
-
-### Ramas (PUSHEADAS a origin, tracking `master`, stacked-to-main)
-- `rediseno-ui/1-ui-sep` (Slice 1) → `rediseno-ui/2-caja-ux` (Slice 2). PRs target `master`.
-- ⚠️ Usuario tiene dudas abiertas sobre el rediseño (a clarificar la próxima sesión).
+### Ramas
+- Todos los cambios de Slices 1-2, SKU configurable y Modo Caja Offline están **mergados a `master`**.
+- `rediseno-ui/2-caja-ux` existe en remoto (ya mergiado).
+- Slices 3-6 se crearán desde `master` cuando se implementen.
 
 ## Deuda técnica real (auditoría 2026-07-19, vigente)
 - 🔴 **Fuga de Storage multi-tenant** — `schema_fase2.sql` (`productos_public_read`) expone objetos
@@ -266,10 +256,10 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
    normales; solo admin con diálogo de confirmación fuerte puede editarlo. Es trabajo de
    `ProductoForm.tsx` + capa `lib/productos.ts` (guarda de negocio, no confiar solo en frontend).
    El Excel es la fuente de códigos; la app no debe dejar editarlos a la ligera.
-2. **492 productos sin imagen** — el usuario va agregando `{sku}.webp` a
-   `G:\Mi unidad\puntoVenta2Tabla\imagenes\` y corre `sync_desde_excel.py` para subirlas.
-3. **Aplicar `patch_05` (storage writes)** y confirmar `patch_06`/`patch_07` en Supabase.
-4. **Llevar lenguaje visual del catálogo a Login/Registro/Venta** para consistencia.
+2. **327 productos sin imagen** — el usuario las sube desde Inventario → ProductoForm.
+3. **Llevar lenguaje visual del catálogo a Login/Registro/Venta** para consistencia.
+4. **Slices 3-6 del rediseño UI** — pagos combinados, devoluciones, presupuestos, hardware.
+5. **Consistencia visual** — Login/Registro/Venta con el mismo estilo del catálogo.
 
 ## Rol del Excel (decisión 2026-07-22)
 El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una fuente viva.
@@ -282,6 +272,13 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
   no se actualiza.
 - **Pendiente futuro:** feature "Catálogo semilla" para onboarding de nuevos tenants
   (ver sección abajo).
+
+### Configuración de Netlify (deploy)
+- **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
+- **Build command:** `cd web && npm install && npm run build`
+- **Publish directory:** `web/dist`
+- **Rama deployada:** `master`
+- **netlify.toml:** está en la raíz del repo con configuración base. **IMPORTANTE:** si el Netlify dashboard tiene campos de build configurados, esos valores tienen prioridad sobre `netlify.toml`. Si los campos del dashboard están vacíos, Netlify usa el `netlify.toml`.
 
 ## Catálogo semilla — onboarding de nuevos tenants (idea 2026-07-22)
 Cuando una nueva empresa instala la app por primera vez, recibe el catálogo semilla
@@ -316,3 +313,10 @@ Una vez que la empresa confirma la carga, los productos se insertan en Supabase 
 - No asumir que el frontend usa archivos estáticos (`web/public/`); verificar con grep en `src`.
 - Los scripts de lanzador (`.ps1` del escritorio) dieron problemas; el usuario prefiere correr los
   `.py` a mano desde PowerShell. No crear más accesos directos.
+- **Netlify dashboard override:** si el dashboard tiene campos de build configurados, esos valores
+  tienen prioridad sobre `netlify.toml`. Si los campos del dashboard están vacíos, Netlify usa
+  el `netlify.toml` de la raíz.
+- **Build necesita `npm install` antes de `npm run build`** porque `package.json` está en `web/`,
+  no en la raíz. El build command completo es `cd web && npm install && npm run build`.
+- **Deploying from master es obligatorio para producción** — las feature branches no auto-deploy
+  a menos que se configure deploy preview explícitamente.

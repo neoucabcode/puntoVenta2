@@ -17,6 +17,8 @@ import { useSkuPreview } from '../hooks/useSkuPreview'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
 import { SkuPreview } from './SkuPreview'
 import { DuplicadoAlert } from './DuplicadoAlert'
+import { ImageEditor } from './ImageEditor'
+import { validarImagen } from '../lib/imageUtils'
 
 type Props = {
   producto: Producto | null
@@ -39,6 +41,8 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [activo, setActivo] = useState(producto?.activo ?? true)
   const [imagenUrl, setImagenUrl] = useState(producto?.imagen_url ?? '')
   const [file, setFile] = useState<File | null>(null)
+  const [editorImage, setEditorImage] = useState<string | null>(null)
+  const [showEditor, setShowEditor] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -67,12 +71,64 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     }
   }, [autoGenEnabled, skuPreview])
 
+  // Listener para pegar imagen desde el portapapeles (Ctrl+V)
+  useEffect(() => {
+    function handlePaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const f = item.getAsFile()
+          if (f) {
+            const v = validarImagen(f)
+            if (!v.ok) {
+              setError(v.error ?? 'Imagen inválida')
+              return
+            }
+            setEditorImage(URL.createObjectURL(f))
+            setFile(f)
+            setShowEditor(true)
+          }
+        }
+      }
+    }
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [])
+
   // On edit: if product already has SKU and auto-gen is active, keep it read-only
   // (admin can uncheck to override)
   const skuReadOnly =
     esEdicion && producto?.sku
       ? autoGenEnabled && !esAdmin
       : autogenerarActivo && !esAdmin
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0]
+    if (!selected) return
+    const v = validarImagen(selected)
+    if (!v.ok) {
+      setError(v.error ?? 'Imagen inválida')
+      return
+    }
+    setEditorImage(URL.createObjectURL(selected))
+    setFile(selected)
+    setShowEditor(true)
+  }
+
+  function handleEditorApply(blob: Blob) {
+    const processed = new File([blob], file?.name ?? 'imagen.webp', {
+      type: 'image/webp',
+    })
+    setFile(processed)
+    setShowEditor(false)
+    setEditorImage(null)
+  }
+
+  function handleEditorCancel() {
+    setShowEditor(false)
+    setEditorImage(null)
+  }
 
   const handleAutoGenToggle = useCallback(() => {
     setAutoGenEnabled((prev) => {
@@ -141,7 +197,15 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
         try {
           const empresaId = await obtenerMiEmpresaId()
           if (!empresaId) throw new Error('No se pudo determinar la empresa')
-          const url = await subirImagenProducto(file, empresaId, guardado.id)
+          if (!guardado.sku) {
+            setError(
+              'Producto guardado, pero no se pudo subir la imagen: el producto no tiene SKU asignado.'
+            )
+            onSaved(guardado)
+            setSaving(false)
+            return
+          }
+          const url = await subirImagenProducto(file, empresaId, guardado.sku)
           guardado = await actualizarProducto(guardado.id, { ...base, imagen_url: url })
         } catch (upErr) {
           setError(
@@ -176,8 +240,9 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       return
     }
 
-    // Fuzzy duplicate check before submit (only when auto-gen active and not editing)
-    if (autoGenEnabled && !esEdicion && nombre.trim().length >= 3) {
+    // Fuzzy duplicate check before submit (when auto-gen active; on create always, on edit only if name changed)
+    const nombreCambio = esEdicion && nombre.trim() !== (producto?.nombre ?? '').trim()
+    if (autoGenEnabled && nombre.trim().length >= 3 && (!esEdicion || nombreCambio)) {
       try {
         const empresaId = await obtenerMiEmpresaId()
         if (empresaId && config?.umbral_similitud !== undefined) {
@@ -186,8 +251,11 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             nombre.trim(),
             config.umbral_similitud
           )
-          if (encontrados.length > 0) {
-            setSimilares(encontrados)
+          const filtrados = esEdicion
+            ? encontrados.filter((s) => s.sku !== producto?.sku)
+            : encontrados
+          if (filtrados.length > 0) {
+            setSimilares(filtrados)
             setShowDuplicado(true)
             setSaving(false)
             return
@@ -355,13 +423,46 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                 placeholder="https://…"
               />
             </label>
-            <label className="span-2">
-              Subir imagen (opcional)
+            <label className="span-2 image-upload-zone">
               <input
                 type="file"
-                accept="image/*"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={handleFileSelect}
+                className="sr-only"
               />
+              {file ? (
+                <div className="image-upload-preview">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt="Vista previa"
+                    className="image-upload-thumb"
+                  />
+                  <span className="image-upload-text">
+                    Imagen seleccionada — haz click para cambiar
+                  </span>
+                  <button
+                    type="button"
+                    className="image-upload-edit-btn"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (file) {
+                        setEditorImage(URL.createObjectURL(file))
+                        setShowEditor(true)
+                      }
+                    }}
+                  >
+                    <span className="material-symbols-outlined">edit</span>
+                    Editar imagen
+                  </button>
+                </div>
+              ) : (
+                <div className="image-upload-empty">
+                  <span className="material-symbols-outlined">add_a_photo</span>
+                  <span className="image-upload-text">
+                    Arrastra una imagen, pega del portapapeles (Ctrl+V) o haz click
+                  </span>
+                </div>
+              )}
             </label>
             <label className="check span-2">
               <input
@@ -416,6 +517,13 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             </footer>
           </div>
         </div>
+      )}
+      {showEditor && editorImage && (
+        <ImageEditor
+          image={editorImage}
+          onApply={handleEditorApply}
+          onCancel={handleEditorCancel}
+        />
       )}
     </>
   )

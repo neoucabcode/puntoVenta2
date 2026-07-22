@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { generarSku } from '../lib/sku'
+import { obtenerPreviewSku } from '../lib/sku'
 import { obtenerMiEmpresaId } from '../lib/empresa'
 import { useEmpresaConfig } from './useEmpresaConfig'
 
@@ -21,7 +21,7 @@ export function useSkuPreview(categoriaId: string | null) {
       try {
         const empresaId = await obtenerMiEmpresaId()
         if (!empresaId || cancelled) return
-        const sku = await generarSku(empresaId, categoriaId ?? undefined)
+        const sku = await obtenerPreviewSku(empresaId, categoriaId ?? undefined)
         if (!cancelled) setSkuPreview(sku)
       } catch {
         if (!cancelled) setSkuPreview(null)

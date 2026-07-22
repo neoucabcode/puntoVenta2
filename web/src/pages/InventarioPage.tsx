@@ -18,6 +18,7 @@ import {
 } from '../lib/productos'
 import { obtenerMiEmpresaId } from '../lib/empresa'
 import { ProductoForm } from '../components/ProductoForm'
+import { SkuConfigForm } from '../components/SkuConfigForm'
 import { DataTable } from '../components/DataTable'
 import { ConfirmarEliminarModal } from '../components/ConfirmarEliminarModal'
 import { HistorialModal } from '../components/HistorialModal'
@@ -36,7 +37,7 @@ function esBajoStock(p: ProductoJoin): boolean {
 type DeleteTarget = { producto: ProductoJoin; mode: 'desactivar' | 'eliminar' }
 
 export function InventarioPage() {
-  const { inventarioHabilitado } = useUsuarioRol()
+  const { inventarioHabilitado, esAdmin } = useUsuarioRol()
 
   const [productos, setProductos] = useState<ProductoJoin[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -63,6 +64,8 @@ export function InventarioPage() {
   const [historialOpen, setHistorialOpen] = useState(false)
   const [historialEntries, setHistorialEntries] = useState<HistorialEntry[]>([])
   const [historialLoading, setHistorialLoading] = useState(false)
+
+  const [skuConfigOpen, setSkuConfigOpen] = useState(false)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -286,6 +289,11 @@ export function InventarioPage() {
           <button className="ghost" onClick={() => setAjusteOpen(true)}>
             <span className="material-symbols-outlined">scale</span> Ajuste de stock
           </button>
+          {esAdmin && (
+            <button className="ghost" onClick={() => setSkuConfigOpen(true)}>
+              <span className="material-symbols-outlined">settings</span> Configurar SKU
+            </button>
+          )}
           <button className="primary" onClick={() => setShowNuevo(true)}>
             <span className="material-symbols-outlined">add</span> Nuevo producto
           </button>
@@ -529,6 +537,10 @@ export function InventarioPage() {
           loading={historialLoading}
           onClose={() => setHistorialOpen(false)}
         />
+      )}
+
+      {skuConfigOpen && (
+        <SkuConfigForm onClose={() => setSkuConfigOpen(false)} />
       )}
     </div>
   )

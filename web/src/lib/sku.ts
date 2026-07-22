@@ -71,6 +71,56 @@ export async function generarSku(
   return (data as string | null) ?? null
 }
 
+// Lee el contador actual SIN incrementarlo, para previsualizar el próximo SKU.
+// Devuelve null si no hay configuración o autogenerar está desactivado.
+export async function obtenerPreviewSku(
+  empresaId: string,
+  categoriaId?: string
+): Promise<string | null> {
+  if (!supabase) {
+    return generarSkuMock(empresaId, categoriaId)
+  }
+
+  const config = await obtenerConfigSku(empresaId)
+  if (!config || !config.autogenerar_activo) return null
+
+  // Leer el contador actual sin incrementar
+  let query = supabase
+    .from('empresa_sku_contador')
+    .select('ultimo_valor')
+    .eq('empresa_id', empresaId)
+
+  if (config.modo_contador === 'por_categoria' && categoriaId) {
+    query = query.eq('categoria_id', categoriaId)
+  } else {
+    query = query.is('categoria_id', null)
+  }
+
+  const { data, error } = await query.maybeSingle()
+  if (error) throw error
+
+  const contadorActual = data ? Number(data.ultimo_valor) : 0
+  const siguiente = contadorActual + 1
+  const padded = String(siguiente).padStart(config.longitud_secuencial, '0')
+
+  if (config.plantilla === 'prefijo_fijo_secuencial' && config.prefijo_manual) {
+    return `${config.prefijo_manual}-${padded}`
+  }
+  if (config.plantilla === 'categoria_secuencial' && categoriaId) {
+    // Obtener código de categoría
+    const { data: catData } = await supabase
+      .from('categoria')
+      .select('codigo')
+      .eq('id', categoriaId)
+      .eq('empresa_id', empresaId)
+      .single()
+    const catCode = (catData?.codigo as string | null)?.toUpperCase()
+    if (!catCode) return null
+    return `${catCode}-${padded}`
+  }
+  return padded
+}
+
 // Busca productos con nombres similares usando trigram similarity.
 // Retorna los que superan el umbral, ordenados por similitud DESC.
 export async function buscarProductosSimilares(

@@ -241,34 +241,67 @@ export async function crearCategoria(nombre: string): Promise<Categoria> {
   return data as Categoria
 }
 
+async function convertirAWebp(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        reject(new Error('No se pudo obtener el contexto del canvas'))
+        return
+      }
+      ctx.drawImage(img, 0, 0)
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(url)
+          if (blob) resolve(blob)
+          else reject(new Error('Error al convertir imagen a WebP'))
+        },
+        'image/webp',
+        0.9
+      )
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('No se pudo cargar la imagen para convertir'))
+    }
+    img.src = url
+  })
+}
+
 export async function subirImagenProducto(
   file: File,
-  empresaId: string,
+  _empresaId: string,
   sku: string
 ): Promise<string> {
   if (!supabase) {
-    return subirImagenProductoMock(file, empresaId, sku)
+    return subirImagenProductoMock(file, _empresaId, sku)
   }
-  const ext = file.name.split('.').pop()?.toLowerCase() || 'webp'
-  const path = `${empresaId}/${sku}.${ext}`
+  const webpBlob = await convertirAWebp(file)
+  const path = `productos/${sku}.webp`
   const { error } = await supabase.storage
     .from('productos')
-    .upload(path, file, { upsert: true, contentType: file.type })
+    .upload(path, webpBlob, { upsert: true, contentType: 'image/webp' })
   if (error) throw error
   const { data } = supabase.storage.from('productos').getPublicUrl(path)
   return data.publicUrl
 }
 
 export async function renombrarImagen(
-  empresaId: string,
+  _empresaId: string,
   oldSku: string,
   newSku: string,
-  ext: string
+  _ext: string
 ): Promise<void> {
   if (!supabase) return
   const bucket = supabase.storage.from('productos')
-  const oldPath = `${empresaId}/${oldSku}.${ext}`
-  const newPath = `${empresaId}/${newSku}.${ext}`
+  const oldPath = `productos/${oldSku}.webp`
+  const newPath = `productos/${newSku}.webp`
   // Copiar archivo a nueva ubicación
   const { error: copyError } = await bucket.copy(oldPath, newPath)
   if (copyError) throw copyError
@@ -340,8 +373,7 @@ export async function eliminarProducto(id: string): Promise<void> {
 
   // Si tiene imagen subida a Storage, eliminar el archivo.
   if (producto?.imagen_url && producto?.sku) {
-    const ext = producto.imagen_url.split('.').pop()?.split('?')[0] || 'webp'
-    const filePath = `${empresaId}/${producto.sku}.${ext}`
+    const filePath = `productos/${producto.sku}.webp`
     const { error: storageError } = await supabase.storage
       .from('productos')
       .remove([filePath])
