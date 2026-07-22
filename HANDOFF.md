@@ -262,6 +262,35 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 4. **Slices 3-6 del rediseño UI** — pagos combinados, devoluciones, presupuestos, hardware.
 5. **Consistencia visual** — Login/Registro/Venta con el mismo estilo del catálogo.
 
+## Bugs abiertos (2026-07-22)
+1. **ImageEditor crash** — el editor de imagen crashea la app (pantalla blanca). Se intentó fix con `aspect={4/3}` pero persiste. Pendiente debug en sesión próxima.
+2. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
+
+## Warnings de Supabase (2026-07-22) — pendientes de resolver
+### function_search_path_mutable (7 funciones)
+Fijar `search_path` en estas funciones para evitar vulnerabilidades de search_path:
+- `trg_crear_config_sku_default`
+- `mi_empresa_id`
+- `buscar_productos`
+- `aplicar_venta_offline`
+- `generar_sku`
+- `buscar_productos_similares`
+- `aplicar_ajuste_stock`
+
+Fix: `ALTER FUNCTION nombre_funcion SET search_path = 'public';`
+
+### extension_in_public (1)
+- `pg_trgm` instalado en schema `public`. Mover a otro schema.
+
+### authenticated_security_definer_function_executable (3 funciones)
+Funciones `SECURITY DEFINER` ejecutables por `authenticated`:
+- `clonar_catalogo` → switching a `SECURITY INVOKER`
+- `crear_empresa_con_admin` → switching a `SECURITY INVOKER`
+- `es_de_empresa` → switching a `SECURITY INVOKER`
+
+### auth_leaked_password_protection
+- Protección de contraseñas filtradas deshabilitada. Habilitar en Supabase Auth settings.
+
 ## Rol del Excel (decisión 2026-07-22)
 El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una fuente viva.
 - **Estado:** ✅ DATOS COMPLETADOS (2026-07-22). Todos los productos ya están en Supabase.
