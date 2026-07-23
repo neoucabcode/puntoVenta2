@@ -84,7 +84,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-23, session: Netlify MCP + Supabase access + image bug RESUELTO)
+## Estado actual (última actualización: 2026-07-23, session: ImageEditor crop+paste fix)
 
 ### Producción desplegada
 - **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
@@ -100,7 +100,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **Slices 1-2 del rediseño UI:** DONE. Nav 3 secciones (Venta/Catálogo/Inventario), Catálogo solo lectura, Inventario CRUD admin-gated con ajuste stock + valuación + alerta, Caja UX estilo Fina (flujo 2 pantallas). Offline intacto.
 - **SKU Configurable:** DONE. Generación automática por empresa, fuzzy matching, 3 plantillas. `patch_11_sku_configurable.sql` aplicado en BD.
 - **Modo Caja Offline V1:** DONE. Sesión por dispositivo, cola IndexedDB, auto-sync silencioso, idempotencia. `patch_08` aplicado en BD.
-- **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage unificados a raíz (`productos/{sku}.webp`), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername().
+- **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage unificados a raíz (`productos/{sku}.webp`), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername(). **2026-07-23 session 2:** (4) Crop mismatch fix: al hacer zoom out para ver imagen completa, el output ahora muestra la imagen entera (no recortada) cuando el crop cubre ≥98% de ambas dimensiones, (5) Paste button CSS fix: variables --surface/--text reemplazadas por --surface-1/--text-primary, (6) ClipboardItem API fix: item.types + getType() en vez de item.items.
 - **Estado BD:** 589 productos, 8 categorías, 262 con imagen.
 
 ### Pendiente (Slices 3-6 del rediseño UI)
@@ -271,6 +271,7 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 1. ~~**ImageEditor crash**~~ — **RESUELTO** (2026-07-23). Causa raíz: `aspect={NaN}` en el Cropper original (commit 32dcc23). NaN causa división por cero en el posicionamiento interno de react-easy-crop → error no manejado → pantalla blanca. Fixes aplicados: `aspect={4/3}`, ErrorBoundary, loadImage sin crossOrigin en blob URLs, scaleX/scaleY para coordenadas de crop, errores visibles en UI. Ver memoria `bugfix/imageeditor-crash`.
 2. ~~**Storage path 400 / RLS policy**~~ — **RESUELTO** (2026-07-23). Causa raíz: `mi_empresa_id()` no tenía `search_path` fijo, retornando `NULL` en el contexto de Storage RLS → política nunca coincidía → error "new row violates row-level security policy". Fixes: (1) `mi_empresa_id()` recreada con `SET search_path = 'public'`, (2) políticas de Storage reescritas usando `storage.foldername(name)[1]` (método oficial Supabase) en vez de `like` con string. Ver patch_12.
 3. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
+4. **Botón de pegar (portapapeles) no visible** — el botón de pegar imagen desde portapapeles no aparece en el ImageEditor. CSS corregido (session 2026-07-23) pero aún no visible en producción. Verificar si el CSS se deployó correctamente o si hay otro problema de renderizado.
 
 ## Warnings de Supabase (2026-07-22) — pendientes de resolver
 ### function_search_path_mutable (7 funciones)
