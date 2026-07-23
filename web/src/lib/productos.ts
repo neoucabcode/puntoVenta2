@@ -289,12 +289,18 @@ export async function subirImagenProducto(
     : await convertirAWebp(file)
   // Path debe empezar con empresa_id/ para pasar la storage policy (patch_05)
   const path = `${empresaId}/${sku}.webp`
-  const { error } = await supabase.storage
+  console.log('[subirImagen] path:', path, 'tipo:', webpBlob.type, 'tamaño:', webpBlob.size, 'fileType:', file.type)
+  const { data, error } = await supabase.storage
     .from('productos')
     .upload(path, webpBlob, { upsert: true, contentType: 'image/webp' })
-  if (error) throw error
-  const { data } = supabase.storage.from('productos').getPublicUrl(path)
-  return data.publicUrl
+  if (error) {
+    console.error('[subirImagen] ERROR:', error.message, error)
+    throw error
+  }
+  console.log('[subirImagen] upload OK:', data)
+  const { data: urlData } = supabase.storage.from('productos').getPublicUrl(path)
+  console.log('[subirImagen] publicUrl:', urlData.publicUrl)
+  return urlData.publicUrl
 }
 
 export async function renombrarImagen(
@@ -378,7 +384,7 @@ export async function eliminarProducto(id: string): Promise<void> {
 
   // Si tiene imagen subida a Storage, eliminar el archivo.
   if (producto?.imagen_url && producto?.sku) {
-    const filePath = `productos/${producto.sku}.webp`
+    const filePath = `${empresaId}/${producto.sku}.webp`
     const { error: storageError } = await supabase.storage
       .from('productos')
       .remove([filePath])

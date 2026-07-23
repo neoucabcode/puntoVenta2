@@ -118,9 +118,11 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   }
 
   function handleEditorApply(blob: Blob) {
+    console.log('[ProductoForm] handleEditorApply blob:', blob.type, blob.size)
     const processed = new File([blob], file?.name ?? 'imagen.webp', {
       type: 'image/webp',
     })
+    console.log('[ProductoForm] file procesado:', processed.type, processed.size, processed.name)
     setFile(processed)
     setShowEditor(false)
     setEditorImage(null)
@@ -195,8 +197,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       // Upload por separado: si falla, el producto ya quedó guardado y el
       // usuario puede reintentar la imagen sin perder los demas datos.
       if (file) {
+        console.log('[ProductoForm] file presente, tipo:', file.type, 'tamaño:', file.size, 'nombre:', file.name)
         try {
           const empresaId = await obtenerMiEmpresaId()
+          console.log('[ProductoForm] empresaId:', empresaId)
           if (!empresaId) throw new Error('No se pudo determinar la empresa')
           if (!guardado.sku) {
             setError(
@@ -207,8 +211,11 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             return
           }
           const url = await subirImagenProducto(file, empresaId, guardado.sku)
+          console.log('[ProductoForm] imagen subida, url:', url)
           guardado = await actualizarProducto(guardado.id, { ...base, imagen_url: url })
+          console.log('[ProductoForm] producto actualizado con imagen_url')
         } catch (upErr) {
+          console.error('[ProductoForm] ERROR subida imagen:', upErr)
           setError(
             `Producto guardado, pero la imagen no se subió: ${(upErr as Error).message}`
           )

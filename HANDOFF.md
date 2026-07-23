@@ -84,7 +84,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-22, merge a master + deploy Netlify + inventario mejoras)
+## Estado actual (última actualización: 2026-07-23, session: Netlify MCP + Supabase access + image bug investigation)
 
 ### Producción desplegada
 - **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
@@ -252,6 +252,11 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
   PWA/móvil, no accesible. *Fix:* diálogo propio.
 - 🟡 **Paginación falsa** — "scroll infinito" trae `.limit(500)` hardcodeado. Con 2000+ se rompe.
 
+## Herramientas de sesión (2026-07-23)
+- **Supabase MCP:** acceso directo vía herramientas MCP (list_projects, apply_migration, etc.) — el orchestrator opera sin preguntar.
+- **Netlify MCP:** instalado (`@netlify/mcp` en opencode.json). Reiniciar sesión para activar. Permite deploy, gestión de proyectos, env vars, etc.
+- **Policy de bugs:** para bugs de Supabase/Netlify, consultar docs oficiales (context7 o webfetch) antes de proponer fixes. No repetir soluciones que ya fallaron.
+
 ## Pendiente decidido (NO hecho aún)
 1. **Regla "SKU no editable en la app"** — el código (`sku`) debe ser solo lectura para usuarios
    normales; solo admin con diálogo de confirmación fuerte puede editarlo. Es trabajo de
@@ -262,9 +267,10 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 4. **Slices 3-6 del rediseño UI** — pagos combinados, devoluciones, presupuestos, hardware.
 5. **Consistencia visual** — Login/Registro/Venta con el mismo estilo del catálogo.
 
-## Bugs abiertos (2026-07-22)
-1. **ImageEditor crash** — el editor de imagen crashea la app (pantalla blanca). Se intentó fix con `aspect={4/3}` pero persiste. Pendiente debug en sesión próxima.
-2. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
+## Bugs abiertos (2026-07-23)
+1. ~~**ImageEditor crash**~~ — **RESUELTO** (2026-07-23). Causa raíz: `aspect={NaN}` en el Cropper original (commit 32dcc23). NaN causa división por cero en el posicionamiento interno de react-easy-crop → error no manejado → pantalla blanca. Fixes aplicados: `aspect={4/3}`, ErrorBoundary, loadImage sin crossOrigin en blob URLs, scaleX/scaleY para coordenadas de crop, errores visibles en UI. Ver memoria `bugfix/imageeditor-crash`.
+2. **Storage path 400** — **EN INVESTIGACIÓN** (2026-07-23). Fix parcial aplicado: `subirImagenProducto` usa `empresaId/` como prefijo (patch_05 policies). Pero el bug persiste — la imagen no se sube correctamente. Logs agregados en ProductoForm.tsx y productos.ts para debugging. **Siguiente paso:** revisar storage policies reales en Supabase, verificar que el bucket `productos` tiene las políticas correctas, y consultar docs oficiales de Supabase Storage antes de intentar otro fix.
+3. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
 
 ## Warnings de Supabase (2026-07-22) — pendientes de resolver
 ### function_search_path_mutable (7 funciones)
@@ -333,20 +339,21 @@ Una vez que la empresa confirma la carga, los productos se insertan en Supabase 
 - No commitear secrets. `supabase/.env.local` está en `.gitignore`.
 - Comentarios, identificadores y UI: español neutro/profesional (usuario final hispanohablante).
 - NUMERIC de Postgres = STRING en JSON (PostgREST): tipar `numeric` como `string` en frontend.
+- **🚨 REGLA ESTRICTA: SIEMPRE verificar en dev antes de cualquier deploy.** Antes de push a master,
+  merge, o cualquier operación de deploy: (1) `cd web && npm run dev`, (2) probar la funcionalidad
+  afectada en el navegador, (3) revisar la consola del navegador por errores, (4) SOLO DESPUÉS
+  ejecutar el deploy. Sin excepciones.
 
 ## ⚠️ Lecciones de esta sesión (para no repetir)
+- **react-easy-crop `aspect={NaN}` causa crash blanco** — NaN genera división por cero en posicionamiento interno, propagándose como error no manejado hasta la raíz de React. Siempre usar un número válido.
+- **`loadImage` con `crossOrigin='anonymous'` en blob URLs causa CORS failure silencioso** — el Image no carga pero no hay error visible. Verificar `src.startsWith('blob:')` antes de setear crossOrigin.
+- **`onCropComplete` devuelve coordenadas relativas al tamaño displayado**, NO al tamaño natural. Hay que escalar con `naturalWidth/displayedWidth` antes de dibujar en canvas.
 - **Storage `.list()` devuelve `list`, NO `.data`** como las queries de tabla. No pasar por `_safe()`.
-- **Convención de imágenes en Storage = raíz `productos/{sku}.webp`** (no subcarpeta `empresa_id`).
-  El seed original y las URLs existentes usan la raíz; el sync nuevo debe usar la misma.
-- **El auditor debe listar la raíz del bucket**, no `productos/{empresa_id}/`, si no marca falsos
-  positivos de "rotas".
+- **Storage path para uploads autenticados DEBE empezar con `{empresaId}/`** (patch_05 storage policies). El sync script usa service role que bypasea RLS, pero el frontend NO.
+- **Convención de imágenes en Storage = raíz `productos/{sku}.webp`** (no subcarpeta `empresa_id`). El seed original y las URLs existentes usan la raíz; el sync nuevo debe usar la misma.
+- **El auditor debe listar la raíz del bucket**, no `productos/{empresa_id}/`, si no marca falsos positivos de "rotas".
 - No asumir que el frontend usa archivos estáticos (`web/public/`); verificar con grep en `src`.
-- Los scripts de lanzador (`.ps1` del escritorio) dieron problemas; el usuario prefiere correr los
-  `.py` a mano desde PowerShell. No crear más accesos directos.
-- **Netlify dashboard override:** si el dashboard tiene campos de build configurados, esos valores
-  tienen prioridad sobre `netlify.toml`. Si los campos del dashboard están vacíos, Netlify usa
-  el `netlify.toml` de la raíz.
-- **Build necesita `npm install` antes de `npm run build`** porque `package.json` está en `web/`,
-  no en la raíz. El build command completo es `cd web && npm install && npm run build`.
-- **Deploying from master es obligatorio para producción** — las feature branches no auto-deploy
-  a menos que se configure deploy preview explícitamente.
+- Los scripts de lanzador (`.ps1` del escritorio) dieron problemas; el usuario prefiere correr los `.py` a mano desde PowerShell. No crear más accesos directos.
+- **Netlify dashboard override:** si el dashboard tiene campos de build configurados, esos valores tienen prioridad sobre `netlify.toml`. Si los campos del dashboard están vacíos, Netlify usa el `netlify.toml` de la raíz.
+- **Build necesita `npm install` antes de `npm run build`** porque `package.json` está en `web/`, no en la raíz. El build command completo es `cd web && npm install && npm run build`.
+- **Deploying from master es obligatorio para producción** — las feature branches no auto-deploy a menos que se configure deploy preview explícitamente.
