@@ -133,6 +133,27 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     setEditorImage(null)
   }
 
+  async function handleEditExisting() {
+    if (!imagenUrl) return
+    try {
+      const res = await fetch(imagenUrl)
+      const blob = await res.blob()
+      const ext = imagenUrl.split('.').pop()?.split('?')[0] || 'webp'
+      const mime = blob.type || `image/${ext}`
+      const fileFromUrl = new File([blob], `imagen.${ext}`, { type: mime })
+      setEditorImage(URL.createObjectURL(fileFromUrl))
+      setFile(fileFromUrl)
+      setShowEditor(true)
+    } catch {
+      setError('No se pudo cargar la imagen existente')
+    }
+  }
+
+  function handleRemoveExisting() {
+    setImagenUrl('')
+    setFile(null)
+  }
+
   const handleAutoGenToggle = useCallback(() => {
     setAutoGenEnabled((prev) => {
       const next = !prev
@@ -462,6 +483,41 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                     <span className="material-symbols-outlined">edit</span>
                     Editar imagen
                   </button>
+                </div>
+              ) : imagenUrl ? (
+                <div className="image-upload-preview">
+                  <img
+                    src={imagenUrl}
+                    alt="Imagen existente"
+                    className="image-upload-thumb"
+                  />
+                  <span className="image-upload-text">
+                    Imagen actual — haz click para cambiar
+                  </span>
+                  <div className="image-upload-existing-actions">
+                    <button
+                      type="button"
+                      className="image-upload-edit-btn"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleEditExisting()
+                      }}
+                    >
+                      <span className="material-symbols-outlined">edit</span>
+                      Editar imagen
+                    </button>
+                    <button
+                      type="button"
+                      className="image-upload-remove-btn"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleRemoveExisting()
+                      }}
+                    >
+                      <span className="material-symbols-outlined">delete</span>
+                      Quitar
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="image-upload-empty">

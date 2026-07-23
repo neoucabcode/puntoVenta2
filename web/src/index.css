@@ -1849,6 +1849,31 @@ button { font-family: var(--font); }
 .image-upload-edit-btn .material-symbols-outlined {
   font-size: 0.95rem;
 }
+.image-upload-existing-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+.image-upload-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--off);
+  border-radius: var(--radius-sm);
+  background: var(--off-soft);
+  color: var(--off);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.image-upload-remove-btn:hover {
+  background: var(--off);
+  color: #fff;
+}
+.image-upload-remove-btn .material-symbols-outlined {
+  font-size: 0.95rem;
+}
 
 /* ---------- Image Editor Modal ---------- */
 .image-editor-modal {

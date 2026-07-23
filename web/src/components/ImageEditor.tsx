@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Cropper from 'react-easy-crop'
 import { recortarYConvertir } from '../lib/imageUtils'
 
@@ -20,7 +20,8 @@ const ANCHO_MAX = 600
 export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
-  const [pixelCrop, setPixelCrop] = useState<PixelCrop | null>(null)
+  const pixelCropRef = useRef<PixelCrop | null>(null)
+  const [hasCropped, setHasCropped] = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [applyError, setApplyError] = useState('')
@@ -29,7 +30,8 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
 
   const onCropComplete = useCallback(
     (_croppedArea: unknown, croppedAreaPixels: PixelCrop) => {
-      setPixelCrop(croppedAreaPixels)
+      pixelCropRef.current = croppedAreaPixels
+      setHasCropped(true)
     },
     []
   )
@@ -55,6 +57,7 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
   }, [image])
 
   async function handleApply() {
+    const pixelCrop = pixelCropRef.current
     if (!pixelCrop) return
     setProcesando(true)
     setApplyError('')
@@ -158,7 +161,7 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
             type="button"
             className="primary"
             onClick={handleApply}
-            disabled={procesando || !pixelCrop}
+            disabled={procesando || !hasCropped}
           >
             {procesando ? 'Procesando…' : 'Aplicar'}
           </button>
