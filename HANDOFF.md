@@ -84,7 +84,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-23, session: Netlify MCP + Supabase access + image bug investigation)
+## Estado actual (última actualización: 2026-07-23, session: Netlify MCP + Supabase access + image bug RESUELTO)
 
 ### Producción desplegada
 - **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
@@ -269,7 +269,7 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 
 ## Bugs abiertos (2026-07-23)
 1. ~~**ImageEditor crash**~~ — **RESUELTO** (2026-07-23). Causa raíz: `aspect={NaN}` en el Cropper original (commit 32dcc23). NaN causa división por cero en el posicionamiento interno de react-easy-crop → error no manejado → pantalla blanca. Fixes aplicados: `aspect={4/3}`, ErrorBoundary, loadImage sin crossOrigin en blob URLs, scaleX/scaleY para coordenadas de crop, errores visibles en UI. Ver memoria `bugfix/imageeditor-crash`.
-2. **Storage path 400** — **EN INVESTIGACIÓN** (2026-07-23). Fix parcial aplicado: `subirImagenProducto` usa `empresaId/` como prefijo (patch_05 policies). Pero el bug persiste — la imagen no se sube correctamente. Logs agregados en ProductoForm.tsx y productos.ts para debugging. **Siguiente paso:** revisar storage policies reales en Supabase, verificar que el bucket `productos` tiene las políticas correctas, y consultar docs oficiales de Supabase Storage antes de intentar otro fix.
+2. ~~**Storage path 400 / RLS policy**~~ — **RESUELTO** (2026-07-23). Causa raíz: `mi_empresa_id()` no tenía `search_path` fijo, retornando `NULL` en el contexto de Storage RLS → política nunca coincidía → error "new row violates row-level security policy". Fixes: (1) `mi_empresa_id()` recreada con `SET search_path = 'public'`, (2) políticas de Storage reescritas usando `storage.foldername(name)[1]` (método oficial Supabase) en vez de `like` con string. Ver patch_12.
 3. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
 
 ## Warnings de Supabase (2026-07-22) — pendientes de resolver
