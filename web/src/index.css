@@ -1904,6 +1904,27 @@ button { font-family: var(--font); }
   max-width: 320px;
   cursor: pointer;
 }
+.image-editor-paste-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.image-editor-paste-btn:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.image-editor-paste-btn .material-symbols-outlined {
+  font-size: 1.2rem;
+}
 .image-editor-zoom-label .material-symbols-outlined {
   font-size: 1.2rem;
   color: var(--text-secondary);

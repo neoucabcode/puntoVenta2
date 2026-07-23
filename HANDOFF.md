@@ -100,7 +100,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **Slices 1-2 del rediseño UI:** DONE. Nav 3 secciones (Venta/Catálogo/Inventario), Catálogo solo lectura, Inventario CRUD admin-gated con ajuste stock + valuación + alerta, Caja UX estilo Fina (flujo 2 pantallas). Offline intacto.
 - **SKU Configurable:** DONE. Generación automática por empresa, fuzzy matching, 3 plantillas. `patch_11_sku_configurable.sql` aplicado en BD.
 - **Modo Caja Offline V1:** DONE. Sesión por dispositivo, cola IndexedDB, auto-sync silencioso, idempotencia. `patch_08` aplicado en BD.
-- **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage unificados a raíz (`productos/{sku}.webp`), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar.
+- **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage unificados a raíz (`productos/{sku}.webp`), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername().
 - **Estado BD:** 589 productos, 8 categorías, 262 con imagen.
 
 ### Pendiente (Slices 3-6 del rediseño UI)

@@ -588,6 +588,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             image={editorImage}
             onApply={handleEditorApply}
             onCancel={handleEditorCancel}
+            onPaste={(blob) => {
+              const url = URL.createObjectURL(blob)
+              setEditorImage(url)
+            }}
           />
         </ImageEditorBoundary>
       )}

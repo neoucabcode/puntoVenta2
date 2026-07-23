@@ -6,6 +6,7 @@ interface ImageEditorProps {
   image: string
   onApply: (blob: Blob) => void
   onCancel: () => void
+  onPaste?: (blob: Blob) => void
 }
 
 interface PixelCrop {
@@ -17,10 +18,11 @@ interface PixelCrop {
 
 const ANCHO_MAX = 600
 
-export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
+export function ImageEditor({ image, onApply, onCancel, onPaste }: ImageEditorProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const pixelCropRef = useRef<PixelCrop | null>(null)
+  const croppedAreaRef = useRef<{ width: number; height: number } | null>(null)
   const [hasCropped, setHasCropped] = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -29,8 +31,9 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
   const imageValid = image && image.length > 0 && !imgError
 
   const onCropComplete = useCallback(
-    (_croppedArea: unknown, croppedAreaPixels: PixelCrop) => {
+    (croppedArea: { width: number; height: number }, croppedAreaPixels: PixelCrop) => {
       pixelCropRef.current = croppedAreaPixels
+      croppedAreaRef.current = croppedArea
       setHasCropped(true)
     },
     []
@@ -58,6 +61,7 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
 
   async function handleApply() {
     const pixelCrop = pixelCropRef.current
+    const croppedArea = croppedAreaRef.current
     if (!pixelCrop) return
     setProcesando(true)
     setApplyError('')
@@ -67,31 +71,76 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('No se pudo crear canvas')
 
-      // onCropComplete devuelve coordenadas relativas al tamaño displayado.
-      // Para dibujar sobre la imagen natural, hay que escalar.
-      const scaleX = img.naturalWidth / img.width
-      const scaleY = img.naturalHeight / img.height
+      // When the user zooms out enough, the crop percentages cover nearly
+      // the full image. In that case, output the entire image instead of a
+      // cropped portion — this matches the user's intent of "keep the whole thing".
+      const coversFullImage =
+        croppedArea &&
+        croppedArea.width >= 98 &&
+        croppedArea.height >= 98
 
-      const srcX = pixelCrop.x * scaleX
-      const srcY = pixelCrop.y * scaleY
-      const srcW = pixelCrop.width * scaleX
-      const srcH = pixelCrop.height * scaleY
+      if (coversFullImage) {
+        const outW = Math.min(img.naturalWidth, ANCHO_MAX)
+        const outH = outW * (img.naturalHeight / img.naturalWidth)
+        canvas.width = outW
+        canvas.height = outH
+        ctx.drawImage(img, 0, 0, outW, outH)
+      } else {
+        // pixelCrop is in natural image coordinates (confirmed by react-easy-crop v6 source).
+        // Draw the full image at natural size, then crop the requested region.
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        ctx.drawImage(img, 0, 0)
 
-      // Limitar ancho máximo manteniendo proporción
-      const ratio = pixelCrop.width / pixelCrop.height
-      const outW = Math.min(srcW, ANCHO_MAX)
-      const outH = outW / ratio
+        const ratio = pixelCrop.width / pixelCrop.height
+        const outW = Math.min(pixelCrop.width, ANCHO_MAX)
+        const outH = outW / ratio
 
-      canvas.width = outW
-      canvas.height = outH
+        const croppedCanvas = document.createElement('canvas')
+        const croppedCtx = croppedCanvas.getContext('2d')
+        if (!croppedCtx) throw new Error('No se pudo crear canvas de recorte')
 
-      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH)
+        croppedCanvas.width = outW
+        croppedCanvas.height = outH
+        croppedCtx.drawImage(
+          canvas,
+          pixelCrop.x, pixelCrop.y,
+          pixelCrop.width, pixelCrop.height,
+          0, 0,
+          outW, outH
+        )
+
+        const blob = await recortarYConvertir(croppedCanvas)
+        onApply(blob)
+        return
+      }
+
       const blob = await recortarYConvertir(canvas)
       onApply(blob)
     } catch (err) {
       setApplyError((err as Error).message || 'Error al procesar la imagen')
     } finally {
       setProcesando(false)
+    }
+  }
+
+  async function handlePasteFromClipboard() {
+    try {
+      const items = await navigator.clipboard.read()
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type)
+            if (blob && onPaste) {
+              onPaste(blob)
+              return
+            }
+          }
+        }
+      }
+      setApplyError('No se encontró imagen en el portapapeles')
+    } catch {
+      setApplyError('No se pudo acceder al portapapeles')
     }
   }
 
@@ -113,7 +162,6 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
               image={image}
               crop={crop}
               zoom={zoom}
-              aspect={4 / 3}
               onCropChange={setCrop}
               onZoomChange={setZoom}
               onCropComplete={onCropComplete}
@@ -140,11 +188,21 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
               {applyError}
             </p>
           )}
+          {onPaste && (
+            <button
+              type="button"
+              className="image-editor-paste-btn"
+              onClick={handlePasteFromClipboard}
+              title="Pegar imagen del portapapeles"
+            >
+              <span className="material-symbols-outlined">content_paste</span>
+            </button>
+          )}
           <label className="image-editor-zoom-label">
             <span className="material-symbols-outlined">zoom_out</span>
             <input
               type="range"
-              min={0.5}
+              min={0.1}
               max={3}
               step={0.01}
               value={zoom}
