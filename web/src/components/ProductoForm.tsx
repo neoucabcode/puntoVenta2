@@ -18,6 +18,7 @@ import { useUsuarioRol } from '../hooks/useUsuarioRol'
 import { SkuPreview } from './SkuPreview'
 import { DuplicadoAlert } from './DuplicadoAlert'
 import { ImageEditor } from './ImageEditor'
+import { ImageEditorBoundary } from './ImageEditorBoundary'
 import { validarImagen } from '../lib/imageUtils'
 
 type Props = {
@@ -519,11 +520,13 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
         </div>
       )}
       {showEditor && editorImage && (
-        <ImageEditor
-          image={editorImage}
-          onApply={handleEditorApply}
-          onCancel={handleEditorCancel}
-        />
+        <ImageEditorBoundary onDismiss={handleEditorCancel}>
+          <ImageEditor
+            image={editorImage}
+            onApply={handleEditorApply}
+            onCancel={handleEditorCancel}
+          />
+        </ImageEditorBoundary>
       )}
     </>
   )

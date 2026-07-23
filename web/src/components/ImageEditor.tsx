@@ -22,6 +22,10 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
   const [zoom, setZoom] = useState(1)
   const [pixelCrop, setPixelCrop] = useState<PixelCrop | null>(null)
   const [procesando, setProcesando] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const [applyError, setApplyError] = useState('')
+
+  const imageValid = image && image.length > 0 && !imgError
 
   const onCropComplete = useCallback(
     (_croppedArea: unknown, croppedAreaPixels: PixelCrop) => {
@@ -38,34 +42,51 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onCancel])
 
+  // Validate image loads on mount
+  useEffect(() => {
+    if (!image) {
+      setImgError(true)
+      return
+    }
+    const img = new Image()
+    img.onload = () => {}
+    img.onerror = () => setImgError(true)
+    img.src = image
+  }, [image])
+
   async function handleApply() {
     if (!pixelCrop) return
     setProcesando(true)
+    setApplyError('')
     try {
       const img = await loadImage(image)
       const canvas = document.createElement('canvas')
-      const ratio = pixelCrop.width / pixelCrop.height
-      const width = Math.min(pixelCrop.width, ANCHO_MAX)
-      const height = width / ratio
-      canvas.width = width
-      canvas.height = height
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('No se pudo crear canvas')
-      ctx.drawImage(
-        img,
-        pixelCrop.x,
-        pixelCrop.y,
-        pixelCrop.width,
-        pixelCrop.height,
-        0,
-        0,
-        width,
-        height
-      )
+
+      // onCropComplete devuelve coordenadas relativas al tamaño displayado.
+      // Para dibujar sobre la imagen natural, hay que escalar.
+      const scaleX = img.naturalWidth / img.width
+      const scaleY = img.naturalHeight / img.height
+
+      const srcX = pixelCrop.x * scaleX
+      const srcY = pixelCrop.y * scaleY
+      const srcW = pixelCrop.width * scaleX
+      const srcH = pixelCrop.height * scaleY
+
+      // Limitar ancho máximo manteniendo proporción
+      const ratio = pixelCrop.width / pixelCrop.height
+      const outW = Math.min(srcW, ANCHO_MAX)
+      const outH = outW / ratio
+
+      canvas.width = outW
+      canvas.height = outH
+
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH)
       const blob = await recortarYConvertir(canvas)
       onApply(blob)
-    } catch {
-      // Silenciar error de procesamiento
+    } catch (err) {
+      setApplyError((err as Error).message || 'Error al procesar la imagen')
     } finally {
       setProcesando(false)
     }
@@ -84,17 +105,38 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
           </button>
         </header>
         <div className="image-editor-crop">
-          <Cropper
-            image={image}
-            crop={crop}
-            zoom={zoom}
-            aspect={4 / 3}
-            onCropChange={setCrop}
-            onZoomChange={setZoom}
-            onCropComplete={onCropComplete}
-          />
+          {imageValid ? (
+            <Cropper
+              image={image}
+              crop={crop}
+              zoom={zoom}
+              aspect={4 / 3}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: '#fff',
+                padding: '1rem',
+                textAlign: 'center',
+              }}
+            >
+              No se pudo cargar la imagen
+            </div>
+          )}
         </div>
         <div className="image-editor-controls">
+          {applyError && (
+            <p style={{ color: '#e53935', fontSize: '0.85rem', width: '100%', textAlign: 'center', margin: '0 0 0.5rem' }}>
+              {applyError}
+            </p>
+          )}
           <label className="image-editor-zoom-label">
             <span className="material-symbols-outlined">zoom_out</span>
             <input
@@ -129,7 +171,10 @@ export function ImageEditor({ image, onApply, onCancel }: ImageEditorProps) {
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    // No usar crossOrigin con blob URLs — causa CORS failure silencioso
+    if (!src.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous'
+    }
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
     img.src = src

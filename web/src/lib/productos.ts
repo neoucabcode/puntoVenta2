@@ -276,14 +276,19 @@ async function convertirAWebp(file: File): Promise<Blob> {
 
 export async function subirImagenProducto(
   file: File,
-  _empresaId: string,
+  empresaId: string,
   sku: string
 ): Promise<string> {
   if (!supabase) {
-    return subirImagenProductoMock(file, _empresaId, sku)
+    return subirImagenProductoMock(file, empresaId, sku)
   }
-  const webpBlob = await convertirAWebp(file)
-  const path = `productos/${sku}.webp`
+  // Si el archivo ya es webp (ej. salido del ImageEditor), subirlo directo
+  // para no re-procesar y perder el crop que el usuario hizo.
+  const webpBlob = file.type === 'image/webp'
+    ? file
+    : await convertirAWebp(file)
+  // Path debe empezar con empresa_id/ para pasar la storage policy (patch_05)
+  const path = `${empresaId}/${sku}.webp`
   const { error } = await supabase.storage
     .from('productos')
     .upload(path, webpBlob, { upsert: true, contentType: 'image/webp' })
@@ -293,15 +298,15 @@ export async function subirImagenProducto(
 }
 
 export async function renombrarImagen(
-  _empresaId: string,
+  empresaId: string,
   oldSku: string,
   newSku: string,
   _ext: string
 ): Promise<void> {
   if (!supabase) return
   const bucket = supabase.storage.from('productos')
-  const oldPath = `productos/${oldSku}.webp`
-  const newPath = `productos/${newSku}.webp`
+  const oldPath = `${empresaId}/${oldSku}.webp`
+  const newPath = `${empresaId}/${newSku}.webp`
   // Copiar archivo a nueva ubicación
   const { error: copyError } = await bucket.copy(oldPath, newPath)
   if (copyError) throw copyError
