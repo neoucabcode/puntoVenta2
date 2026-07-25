@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type FormEvent } from 'react'
 import {
   crearProducto,
   actualizarProducto,
@@ -6,6 +6,7 @@ import {
   verificarCodigoDuplicado,
   registrarHistorial,
   renombrarImagen,
+  eliminarImagenProducto,
   type Categoria,
   type Producto,
   type ProductoInput,
@@ -45,7 +46,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [editorImage, setEditorImage] = useState<string | null>(null)
   const [showEditor, setShowEditor] = useState(false)
   const [error, setError] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
   const [saving, setSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<File | null>(null)
 
   const { config } = useEmpresaConfig()
   const { esAdmin } = useUsuarioRol()
@@ -80,13 +84,17 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           const f = item.getAsFile()
-          if (f) {
-            const v = validarImagen(f)
-            if (!v.ok) {
-              setError(v.error ?? 'Imagen inválida')
-              return
-            }
-            setEditorImage(URL.createObjectURL(f))
+            if (f) {
+              const v = validarImagen(f)
+              if (!v.ok) {
+                setError(v.error ?? 'Imagen inválida')
+                return
+              }
+              // FIX: Revocar la URL anterior antes de crear una nueva.
+              setEditorImage((prev) => {
+                if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+                return URL.createObjectURL(f)
+              })
             setFile(f)
             setShowEditor(true)
           }
@@ -96,6 +104,35 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
   }, [])
+
+  // FIX: Sincronizar fileRef con el state file para que handleEditorApply
+  // siempre vea el valor más reciente sin depender del closure.
+  useEffect(() => {
+    fileRef.current = file
+  }, [file])
+
+  // FIX: Revocar blob URLs viejas de editorImage para evitar memory leaks.
+  useEffect(() => {
+    return () => {
+      if (editorImage && editorImage.startsWith('blob:')) {
+        URL.revokeObjectURL(editorImage)
+      }
+    }
+  }, [editorImage])
+
+  // FIX: Memoizar la URL de preview del archivo para no crear y revocar
+  // blob URLs en cada render. Se revoca la anterior cuando file cambia.
+  const filePreviewUrl = useMemo(() => {
+    if (!file) return null
+    return URL.createObjectURL(file)
+  }, [file])
+
+  // Revocar filePreviewUrl cuando cambia o al desmontar
+  useEffect(() => {
+    return () => {
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl)
+    }
+  }, [filePreviewUrl])
 
   // On edit: if product already has SKU and auto-gen is active, keep it read-only
   // (admin can uncheck to override)
@@ -119,7 +156,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
 
   function handleEditorApply(blob: Blob) {
     console.log('[ProductoForm] handleEditorApply blob:', blob.type, blob.size)
-    const processed = new File([blob], file?.name ?? 'imagen.webp', {
+    // FIX: Usar fileRef.current en vez del closure de file para evitar
+    // valor stale si handleFileSelect y el editor se abrieron en el mismo ciclo.
+    const currentFile = fileRef.current
+    const processed = new File([blob], currentFile?.name ?? 'imagen.webp', {
       type: 'image/webp',
     })
     console.log('[ProductoForm] file procesado:', processed.type, processed.size, processed.name)
@@ -149,9 +189,46 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     }
   }
 
-  function handleRemoveExisting() {
+  async function handleRemoveExisting() {
+    // Eliminar archivo de Storage si el producto ya tiene SKU
+    if (producto?.sku) {
+      try {
+        const empresaId = await obtenerMiEmpresaId()
+        if (empresaId) {
+          await eliminarImagenProducto(empresaId, producto.sku)
+        }
+      } catch (err) {
+        console.error('[ProductoForm] Error al eliminar imagen de Storage:', err)
+        // No bloquear al usuario — la imagen se quita del form de todas formas
+      }
+    }
     setImagenUrl('')
     setFile(null)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    const dropped = e.dataTransfer.files?.[0]
+    if (!dropped) return
+    const v = validarImagen(dropped)
+    if (!v.ok) {
+      setError(v.error ?? 'Imagen inválida')
+      return
+    }
+    setEditorImage(URL.createObjectURL(dropped))
+    setFile(dropped)
+    setShowEditor(true)
   }
 
   const handleAutoGenToggle = useCallback(() => {
@@ -234,6 +311,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
           const url = await subirImagenProducto(file, empresaId, guardado.sku)
           console.log('[ProductoForm] imagen subida, url:', url)
           guardado = await actualizarProducto(guardado.id, { ...base, imagen_url: url })
+          // FIX: Sincronizar el estado local con la URL realmente guardada.
+          // Sin esto, si el usuario vuelve a editar sin refrescar la lista,
+          // el form mostraría la imagen vieja o nula.
+          setImagenUrl(url)
           console.log('[ProductoForm] producto actualizado con imagen_url')
         } catch (upErr) {
           console.error('[ProductoForm] ERROR subida imagen:', upErr)
@@ -257,6 +338,8 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       }
     } finally {
       setSaving(false)
+      // FIX: Resetear el input file para permitir re-seleccionar el mismo archivo.
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -452,8 +535,14 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                 placeholder="https://…"
               />
             </label>
-            <label className="span-2 image-upload-zone">
+            <label
+              className={`span-2 image-upload-zone${isDragging ? ' dragging' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={handleFileSelect}
@@ -462,7 +551,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
               {file ? (
                 <div className="image-upload-preview">
                   <img
-                    src={URL.createObjectURL(file)}
+                    src={filePreviewUrl ?? ''}
                     alt="Vista previa"
                     className="image-upload-thumb"
                   />
@@ -474,8 +563,12 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                     className="image-upload-edit-btn"
                     onClick={(e) => {
                       e.preventDefault()
-                      if (file) {
-                        setEditorImage(URL.createObjectURL(file))
+                      if (file && filePreviewUrl) {
+                        // FIX: Revocar la URL anterior del editor antes de crear una nueva.
+                        if (editorImage && editorImage.startsWith('blob:')) {
+                          URL.revokeObjectURL(editorImage)
+                        }
+                        setEditorImage(filePreviewUrl)
                         setShowEditor(true)
                       }
                     }}

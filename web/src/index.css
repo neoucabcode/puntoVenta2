@@ -1798,6 +1798,12 @@ button { font-family: var(--font); }
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.image-upload-zone.dragging {
+  border-color: var(--accent);
+  border-width: 3px;
+  background: var(--accent-soft);
+  transform: scale(1.01);
+}
 .image-upload-empty {
   display: flex;
   flex-direction: column;

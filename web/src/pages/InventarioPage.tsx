@@ -116,7 +116,7 @@ export function InventarioPage() {
           prev.map((x) => (x.id === deleteTarget.producto.id ? { ...x, activo: false } : x))
         )
         if (empresaId) {
-          registrarHistorial(empresaId, deleteTarget.producto.id, deleteTarget.producto.nombre, 'eliminado', {})
+          registrarHistorial(empresaId, deleteTarget.producto.id, deleteTarget.producto.nombre, 'desactivado', {})
         }
       } else {
         await eliminarProducto(deleteTarget.producto.id)
@@ -137,6 +137,10 @@ export function InventarioPage() {
     try {
       await reactivarProducto(p.id)
       setProductos((prev) => prev.map((x) => (x.id === p.id ? { ...x, activo: true } : x)))
+      const empresaId = await obtenerMiEmpresaId()
+      if (empresaId) {
+        registrarHistorial(empresaId, p.id, p.nombre, 'reactivado', {})
+      }
     } catch (err) {
       setError((err as Error).message)
     }

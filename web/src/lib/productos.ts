@@ -299,8 +299,11 @@ export async function subirImagenProducto(
   }
   console.log('[subirImagen] upload OK:', data)
   const { data: urlData } = supabase.storage.from('productos').getPublicUrl(path)
-  console.log('[subirImagen] publicUrl:', urlData.publicUrl)
-  return urlData.publicUrl
+  // FIX: Parámetro de cache-busting. La URL de getPublicUrl es siempre la
+  // misma para el mismo SKU; sin esto el navegador sirve imagen cached tras upsert.
+  const cacheBustedUrl = `${urlData.publicUrl}?t=${Date.now()}`
+  console.log('[subirImagen] publicUrl:', cacheBustedUrl)
+  return cacheBustedUrl
 }
 
 export async function renombrarImagen(
@@ -319,6 +322,18 @@ export async function renombrarImagen(
   // Eliminar archivo antiguo
   const { error: deleteError } = await bucket.remove([oldPath])
   if (deleteError) throw deleteError
+}
+
+// FIX: Eliminar imagen de Storage al quitar imagen del formulario.
+// Evita archivos huérfanos en Supabase Storage.
+export async function eliminarImagenProducto(empresaId: string, sku: string): Promise<void> {
+  if (!supabase) return
+  const filePath = `${empresaId}/${sku}.webp`
+  const { error } = await supabase.storage.from('productos').remove([filePath])
+  // Ignorar error 404 (archivo ya no existe) — solo lanzar errores reales.
+  if (error && error.message !== 'The resource was not found') {
+    throw error
+  }
 }
 
 export async function verificarCodigoDuplicado(
@@ -359,7 +374,7 @@ export type HistorialEntry = {
   empresa_id: string
   producto_id: string | null
   producto_nombre: string
-  accion: 'creado' | 'editado' | 'eliminado' | 'ajuste_stock'
+  accion: 'creado' | 'editado' | 'eliminado' | 'desactivado' | 'reactivado' | 'ajuste_stock'
   detalles: Record<string, unknown>
   usuario_id: string | null
   creado_en: string

@@ -67,11 +67,13 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **RLS:** activo, aislamiento por empresa_id
 - **PWA:** sí (service worker + manifest)
 
-### Snapshot de BD (2026-07-22)
+### Snapshot de BD (2026-07-24 verificado)
 | Productos | Con imagen | Categorías | Usuarios | Admins | Cajas abiertas | Ventas pendientes |
 |-----------|-----------|------------|----------|--------|----------------|-------------------|
-| 589 | 262 | 8 | 1 | 1 | 0 | 0 |
+| 589 | 281 | 8 | 1 | 1 | 1 | 0 |
 
+> **Objetos en Storage (bucket `productos`):** 281 (coincide con `productos_con_imagen`). Convención: `{empresa_id}/{sku}.webp` — verificado.
+>
 > Correr este query al inicio de cada sesión para mantener al día al asistente:
 > ```sql
 > SELECT 
@@ -84,7 +86,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-23, session: ImageEditor crop+paste fix)
+## Estado actual (última actualización: 2026-07-24, session: verificación estado real + actualización HANDOFF)
 
 ### Producción desplegada
 - **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
@@ -100,8 +102,8 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **Slices 1-2 del rediseño UI:** DONE. Nav 3 secciones (Venta/Catálogo/Inventario), Catálogo solo lectura, Inventario CRUD admin-gated con ajuste stock + valuación + alerta, Caja UX estilo Fina (flujo 2 pantallas). Offline intacto.
 - **SKU Configurable:** DONE. Generación automática por empresa, fuzzy matching, 3 plantillas. `patch_11_sku_configurable.sql` aplicado en BD.
 - **Modo Caja Offline V1:** DONE. Sesión por dispositivo, cola IndexedDB, auto-sync silencioso, idempotencia. `patch_08` aplicado en BD.
-- **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage unificados a raíz (`productos/{sku}.webp`), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername(). **2026-07-23 session 2:** (4) Crop mismatch fix: al hacer zoom out para ver imagen completa, el output ahora muestra la imagen entera (no recortada) cuando el crop cubre ≥98% de ambas dimensiones, (5) Paste button CSS fix: variables --surface/--text reemplazadas por --surface-1/--text-primary, (6) ClipboardItem API fix: item.types + getType() en vez de item.items.
-- **Estado BD:** 589 productos, 8 categorías, 262 con imagen.
+- **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage: `{empresa_id}/{sku}.webp` (verificado en producción), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername(). **2026-07-23 session 2:** (4) Crop mismatch fix: al hacer zoom out para ver imagen completa, el output ahora muestra la imagen entera (no recortada) cuando el crop cubre ≥98% de ambas dimensiones, (5) Paste button CSS fix: variables --surface/--text reemplazadas por --surface-1/--text-primary, (6) ClipboardItem API fix: item.types + getType() en vez de item.items.
+- **Estado BD:** 589 productos, 8 categorías, 281 con imagen (281 objetos en Storage verificado).
 
 ### Pendiente (Slices 3-6 del rediseño UI)
 - **Slice 3:** Pagos combinados + cliente + cuenta corriente
@@ -113,6 +115,8 @@ nunca ve los datos de "El Martillo" ni viceversa.
 ### Pendiente del usuario
 - ✅ **W1:** `patch_09_inventario.sql` — APLICADO.
 - ✅ **W2:** Rol admin asignado.
+- ✅ **Imágenes en Storage:** 281 objetos (bucket `productos`, convención `{empresa_id}/{sku}.webp` verificado).
+- ⏳ **308 productos sin imagen** (589 total - 281 con imagen) — el usuario las sube desde Inventario → ProductoForm.
 
 ## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
@@ -128,9 +132,9 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **Supabase es la fuente de verdad en runtime.** El Excel solo se usa al inicio / mientras el
   usuario lo edita como hoja de cálculo. Una vez que la app arranca en uso real, el catálogo se
   gestiona desde la app.
-- **Imágenes:** viven en Supabase Storage bucket `productos`, en la **RAÍZ** del bucket:
-  `productos/{sku}.webp`, enlazadas por `producto.imagen_url`
-  (`https://pvopcajqersioqlmccwg.supabase.co/storage/v1/object/public/productos/{sku}.webp`).
+- **Imágenes:** viven en Supabase Storage bucket `productos`, en subcarpeta por empresa:
+  `productos/{empresa_id}/{sku}.webp`, enlazadas por `producto.imagen_url`
+  (`https://pvopcajqersioqlmccwg.supabase.co/storage/v1/object/public/productos/{empresa_id}/{sku}.webp`).
   - Convención: el usuario nombra el archivo local igual que el SKU (`{sku}.webp`).
   - Carpeta local de imágenes en Drive: `G:\Mi unidad\puntoVenta2Tabla\imagenes\{sku}.webp`.
 - **NO se pierden las imágenes ya vinculadas en Supabase.** El script de sync nunca pisa una
@@ -244,13 +248,13 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - `rediseno-ui/2-caja-ux` existe en remoto (ya mergiado).
 - Slices 3-6 se crearán desde `master` cuando se implementen.
 
-## Deuda técnica real (auditoría 2026-07-19, vigente)
-- 🔴 **Fuga de Storage multi-tenant** — `schema_fase2.sql` (`productos_public_read`) expone objetos
-  sin chequear `es_de_empresa`. Hoy cualquier empresa podría leer imágenes de otra. Postergado
-  (dueño único). *Fix futuro:* agregar guarda `es_de_empresa(empresa_id)` en la policy de SELECT.
-- 🟠 **`confirm()` nativo del navegador** en `CatalogoPage`/`Layout` para borrar/desactivar. Malo en
-  PWA/móvil, no accesible. *Fix:* diálogo propio.
+## Deuda técnica real (auditoría 2026-07-24 verificada)
+- 🔴 **Fuga de Storage multi-tenant** — `productos_public_read` expone objetos sin chequear `empresa_id` (cualquier usuario autenticado ve imágenes de TODAS las empresas). `productos_auth_insert` no existe (cualquiera sube a cualquier carpeta). **Fix:** agregar `foldername(name)[1] = mi_empresa_id()` a SELECT e INSERT policies. (Postergado: dueño único, pero bloquea multi-tenant real).
+- 🟠 **`confirm()` nativo del navegador** en `CatalogoPage`/`Layout` para borrar/desactivar. Malo en PWA/móvil, no accesible. *Fix:* diálogo propio.
 - 🟡 **Paginación falsa** — "scroll infinito" trae `.limit(500)` hardcodeado. Con 2000+ se rompe.
+- 🟠 **`search_path` mutable en 3 funciones** — `clonar_catalogo`, `crear_empresa_con_admin`, `es_de_empresa` siguen como `SECURITY DEFINER` con `search_path` vacío. Cambiar a `SECURITY INVOKER` + `SET search_path = 'public'`.
+- 🟠 **pg_trgm en schema `public`** — mover a schema dedicado (ej. `extensions`).
+- 🟠 **auth_leaked_password_protection** — habilitar en Supabase Dashboard → Authentication → Settings.
 
 ## Herramientas de sesión (2026-07-23)
 - **Supabase MCP:** acceso directo vía herramientas MCP (list_projects, apply_migration, etc.) — el orchestrator opera sin preguntar.
@@ -262,41 +266,36 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
    normales; solo admin con diálogo de confirmación fuerte puede editarlo. Es trabajo de
    `ProductoForm.tsx` + capa `lib/productos.ts` (guarda de negocio, no confiar solo en frontend).
    El Excel es la fuente de códigos; la app no debe dejar editarlos a la ligera.
-2. **327 productos sin imagen** — el usuario las sube desde Inventario → ProductoForm.
+2. **308 productos sin imagen** — el usuario las sube desde Inventario → ProductoForm.
 3. **Llevar lenguaje visual del catálogo a Login/Registro/Venta** para consistencia.
 4. **Slices 3-6 del rediseño UI** — pagos combinados, devoluciones, presupuestos, hardware.
 5. **Consistencia visual** — Login/Registro/Venta con el mismo estilo del catálogo.
 
-## Bugs abiertos (2026-07-23)
+## Bugs abiertos (2026-07-24 verificado)
 1. ~~**ImageEditor crash**~~ — **RESUELTO** (2026-07-23). Causa raíz: `aspect={NaN}` en el Cropper original (commit 32dcc23). NaN causa división por cero en el posicionamiento interno de react-easy-crop → error no manejado → pantalla blanca. Fixes aplicados: `aspect={4/3}`, ErrorBoundary, loadImage sin crossOrigin en blob URLs, scaleX/scaleY para coordenadas de crop, errores visibles en UI. Ver memoria `bugfix/imageeditor-crash`.
 2. ~~**Storage path 400 / RLS policy**~~ — **RESUELTO** (2026-07-23). Causa raíz: `mi_empresa_id()` no tenía `search_path` fijo, retornando `NULL` en el contexto de Storage RLS → política nunca coincidía → error "new row violates row-level security policy". Fixes: (1) `mi_empresa_id()` recreada con `SET search_path = 'public'`, (2) políticas de Storage reescritas usando `storage.foldername(name)[1]` (método oficial Supabase) en vez de `like` con string. Ver patch_12.
 3. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
 4. **Botón de pegar (portapapeles) no visible** — el botón de pegar imagen desde portapapeles no aparece en el ImageEditor. CSS corregido (session 2026-07-23) pero aún no visible en producción. Verificar si el CSS se deployó correctamente o si hay otro problema de renderizado.
+5. **Fuga Storage multi-tenant** — `productos_public_read` expone TODAS las imágenes a CUALQUIER usuario autenticado (sin filtro `empresa_id`). `productos_auth_insert` no existe (cualquiera puede subir a cualquier carpeta). Fix pendiente: agregar `foldername(name)[1] = mi_empresa_id()` a SELECT e INSERT policies.
 
-## Warnings de Supabase (2026-07-22) — pendientes de resolver
-### function_search_path_mutable (7 funciones)
-Fijar `search_path` en estas funciones para evitar vulnerabilidades de search_path:
-- `trg_crear_config_sku_default`
-- `mi_empresa_id`
-- `buscar_productos`
-- `aplicar_venta_offline`
-- `generar_sku`
-- `buscar_productos_similares`
-- `aplicar_ajuste_stock`
+### Verificación Supabase Warnings (2026-07-24)
+| Warning | Estado | Detalle |
+|---------|--------|---------|
+| **function_search_path_mutable** (7 fn) | ✅ **RESUELTO** | `ALTER FUNCTION ... SET search_path = 'public'` aplicado a las 7 funciones (`trg_crear_config_sku_default`, `mi_empresa_id`, `buscar_productos`, `aplicar_venta_offline`, `generar_sku`, `buscar_productos_similares`, `aplicar_ajuste_stock`). Verificado: `proconfig = 'search_path=public'`. |
+| **extension_in_public** (pg_trgm) | ⚠️ **PENDIENTE** | Extensión `pg_trgm` instalada en schema `public`. Mover a schema dedicado (ej. `extensions`). |
+| **authenticated_security_definer_function_executable** (3 fn) | ⚠️ **PENDIENTE** | `clonar_catalogo`, `crear_empresa_con_admin`, `es_de_empresa` siguen como `SECURITY DEFINER`. Cambiar a `SECURITY INVOKER`. |
+| **auth_leaked_password_protection** | ⚠️ **PENDIENTE** | Configuración en Supabase Dashboard → Authentication → Settings → "Leaked password protection" → **Enable**. |
 
-Fix: `ALTER FUNCTION nombre_funcion SET search_path = 'public';`
+## Storage RLS — Estado real (verificado 2026-07-24)
 
-### extension_in_public (1)
-- `pg_trgm` instalado en schema `public`. Mover a otro schema.
+| Policy | Comando | Expresión | Aislamiento tenant |
+|--------|---------|-----------|-------------------|
+| `productos_public_read` | SELECT | `bucket_id = 'productos'` | ❌ **NO** — cualquiera autenticado ve TODAS las imágenes de TODAS las empresas |
+| `productos_auth_insert` | INSERT | *(NULL — sin policy)* | ❌ **NO** — cualquiera autenticado puede subir a cualquier carpeta |
+| `productos_auth_update` | UPDATE | `foldername(name)[1] = mi_empresa_id()` | ✅ SÍ |
+| `productos_auth_delete` | DELETE | `foldername(name)[1] = mi_empresa_id()` | ✅ SÍ |
 
-### authenticated_security_definer_function_executable (3 funciones)
-Funciones `SECURITY DEFINER` ejecutables por `authenticated`:
-- `clonar_catalogo` → switching a `SECURITY INVOKER`
-- `crear_empresa_con_admin` → switching a `SECURITY INVOKER`
-- `es_de_empresa` → switching a `SECURITY INVOKER`
-
-### auth_leaked_password_protection
-- Protección de contraseñas filtradas deshabilitada. Habilitar en Supabase Auth settings.
+> **Acción requerida:** Corregir `productos_public_read` (agregar `foldername(name)[1] = mi_empresa_id()`) y crear policy `productos_auth_insert` con misma guarda. Esto cierra la **fuga de Storage multi-tenant** (deuda técnica 🔴).
 
 ## Rol del Excel (decisión 2026-07-22)
 El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una fuente viva.
