@@ -9,7 +9,7 @@ interface ImageEditorProps {
   onPaste?: (blob: Blob) => void
 }
 
-interface PixelCrop {
+interface CroppedArea {
   x: number
   y: number
   width: number
@@ -21,8 +21,7 @@ const ANCHO_MAX = 600
 export function ImageEditor({ image, onApply, onCancel, onPaste }: ImageEditorProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
-  const pixelCropRef = useRef<PixelCrop | null>(null)
-  const croppedAreaRef = useRef<{ width: number; height: number } | null>(null)
+  const croppedAreaRef = useRef<CroppedArea | null>(null)
   const [hasCropped, setHasCropped] = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -31,8 +30,7 @@ export function ImageEditor({ image, onApply, onCancel, onPaste }: ImageEditorPr
   const imageValid = image && image.length > 0 && !imgError
 
   const onCropComplete = useCallback(
-    (croppedArea: { width: number; height: number }, croppedAreaPixels: PixelCrop) => {
-      pixelCropRef.current = croppedAreaPixels
+    (croppedArea: CroppedArea) => {
       croppedAreaRef.current = croppedArea
       setHasCropped(true)
     },
@@ -60,9 +58,8 @@ export function ImageEditor({ image, onApply, onCancel, onPaste }: ImageEditorPr
   }, [image])
 
   async function handleApply() {
-    const pixelCrop = pixelCropRef.current
     const croppedArea = croppedAreaRef.current
-    if (!pixelCrop) return
+    if (!croppedArea) return
     setProcesando(true)
     setApplyError('')
     try {
@@ -75,7 +72,6 @@ export function ImageEditor({ image, onApply, onCancel, onPaste }: ImageEditorPr
       // the full image. In that case, output the entire image instead of a
       // cropped portion — this matches the user's intent of "keep the whole thing".
       const coversFullImage =
-        croppedArea &&
         croppedArea.width >= 98 &&
         croppedArea.height >= 98
 
@@ -86,33 +82,29 @@ export function ImageEditor({ image, onApply, onCancel, onPaste }: ImageEditorPr
         canvas.height = outH
         ctx.drawImage(img, 0, 0, outW, outH)
       } else {
-        // pixelCrop is in natural image coordinates (confirmed by react-easy-crop v6 source).
-        // Draw the full image at natural size, then crop the requested region.
-        canvas.width = img.naturalWidth
-        canvas.height = img.naturalHeight
-        ctx.drawImage(img, 0, 0)
+        // croppedArea is in percentages (0-100) of the image, as provided by
+        // react-easy-crop's onCropComplete. Since the Cropper renders the image
+        // with uniform scaling (contain + zoom), these percentages are identical
+        // whether relative to the displayed image or the natural image.
+        // Convert to natural image pixel coordinates for the canvas crop.
+        const naturalX = (croppedArea.x / 100) * img.naturalWidth
+        const naturalY = (croppedArea.y / 100) * img.naturalHeight
+        const naturalW = (croppedArea.width / 100) * img.naturalWidth
+        const naturalH = (croppedArea.height / 100) * img.naturalHeight
 
-        const ratio = pixelCrop.width / pixelCrop.height
-        const outW = Math.min(pixelCrop.width, ANCHO_MAX)
+        const ratio = naturalW / naturalH
+        const outW = Math.min(naturalW, ANCHO_MAX)
         const outH = outW / ratio
 
-        const croppedCanvas = document.createElement('canvas')
-        const croppedCtx = croppedCanvas.getContext('2d')
-        if (!croppedCtx) throw new Error('No se pudo crear canvas de recorte')
-
-        croppedCanvas.width = outW
-        croppedCanvas.height = outH
-        croppedCtx.drawImage(
-          canvas,
-          pixelCrop.x, pixelCrop.y,
-          pixelCrop.width, pixelCrop.height,
+        canvas.width = outW
+        canvas.height = outH
+        ctx.drawImage(
+          img,
+          naturalX, naturalY,
+          naturalW, naturalH,
           0, 0,
           outW, outH
         )
-
-        const blob = await recortarYConvertir(croppedCanvas)
-        onApply(blob)
-        return
       }
 
       const blob = await recortarYConvertir(canvas)
