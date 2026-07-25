@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   listarProductos,
@@ -67,32 +67,77 @@ export function InventarioPage() {
 
   const [skuConfigOpen, setSkuConfigOpen] = useState(false)
 
-  const cargar = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const [prods, cats] = await Promise.all([
-        listarProductos({
-          search,
-          categoriaId: categoriaFiltro || null,
-          soloActivos: false,
-          offset: 0,
-          pageSize: PAGE_SIZE,
-        }),
-        listarCategorias(),
-      ])
-      setProductos(prods.items)
-      setCategorias(cats)
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }, [search, categoriaFiltro])
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const sentinelaRef = useRef<HTMLDivElement | null>(null)
+  const gridScrollRef = useRef<HTMLDivElement | null>(null)
+  const listaScrollRef = useRef<HTMLDivElement | null>(null)
+  const offsetRef = useRef(0)
+  const cargandoRef = useRef(false)
+
+  const cargarPagina = useCallback(
+    async (reset: boolean) => {
+      if (cargandoRef.current) return
+      cargandoRef.current = true
+      if (reset) {
+        setLoading(true)
+      } else {
+        setLoadingMore(true)
+      }
+      setError('')
+      try {
+        const offset = reset ? 0 : offsetRef.current
+        const [prods, cats] = await Promise.all([
+          listarProductos({
+            search,
+            categoriaId: categoriaFiltro || null,
+            soloActivos: false,
+            offset,
+            pageSize: PAGE_SIZE,
+          }),
+          listarCategorias(),
+        ])
+        if (reset) {
+          setProductos(prods.items)
+          offsetRef.current = prods.items.length
+        } else {
+          setProductos((prev) => [...prev, ...prods.items])
+          offsetRef.current += prods.items.length
+        }
+        setHasMore(prods.hasMore)
+        setCategorias(cats)
+      } catch (err) {
+        setError((err as Error).message)
+      } finally {
+        cargandoRef.current = false
+        if (reset) {
+          setLoading(false)
+        } else {
+          setLoadingMore(false)
+        }
+      }
+    },
+    [search, categoriaFiltro]
+  )
 
   useEffect(() => {
-    void cargar()
-  }, [cargar])
+    cargarPagina(true)
+  }, [cargarPagina])
+
+  useEffect(() => {
+    const node = sentinelaRef.current
+    if (!node) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !cargandoRef.current) {
+          cargarPagina(false)
+        }
+      },
+      { root: vista === 'grid' ? gridScrollRef.current : listaScrollRef.current, rootMargin: '200px' }
+    )
+    obs.observe(node)
+    return () => obs.disconnect()
+  }, [hasMore, cargarPagina, vista])
 
   const valuacion = useMemo(() => calcularValuacion(productos), [productos])
   const bajos = useMemo(() => productos.filter(esBajoStock), [productos])
@@ -191,7 +236,7 @@ export function InventarioPage() {
       setAjusteProductoId('')
       setAjusteCantidad('')
       setAjusteMotivo(MOTIVOS_AJUSTE[0])
-      await cargar()
+      await cargarPagina(true)
     } catch (err) {
       setAjusteError((err as Error).message)
     } finally {
@@ -311,7 +356,7 @@ export function InventarioPage() {
           {loading ? (
             <p>Cargando…</p>
           ) : vista === 'grid' ? (
-            <div className="productos-grid-scroll">
+            <div className="productos-grid-scroll" ref={gridScrollRef}>
               <div className="productos-grid">
                 {productos.map((p) => (
                   <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
@@ -370,6 +415,7 @@ export function InventarioPage() {
                     </div>
                   </article>
                 ))}
+                <div ref={sentinelaRef} className="sentinela" />
               </div>
             </div>
           ) : (
@@ -428,7 +474,11 @@ export function InventarioPage() {
         rowKey={(p) => p.id}
         isInactivo={(p) => !p.activo}
         empty="No hay productos para los filtros actuales"
+        scrollRef={listaScrollRef}
+        after={<div ref={sentinelaRef} className="sentinela" />}
       />)}
+
+          {loadingMore && <p className="loading-more">Cargando más…</p>}
         </main>
       </div>
 
@@ -474,7 +524,7 @@ export function InventarioPage() {
                 }
               }
             }
-            void cargar()
+            void cargarPagina(true)
           }}
         />
       )}
