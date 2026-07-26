@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listarProductos, type ProductoJoin } from '../lib/productos'
+import { listarProductos, listarCategorias, type ProductoJoin, type Categoria } from '../lib/productos'
 import { obtenerMiEmpresa } from '../lib/empresa'
 import { registrarVentaOffline } from '../lib/ventaOffline'
 import { useCajaStore } from '../store/useCajaStore'
@@ -8,9 +8,10 @@ import {
   marcarTasaSincronizada,
   leerTasaSincronizada,
 } from '../lib/tasaSync'
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
+import { SortDropdown } from '../components/SortDropdown'
 
 const CLIENTES_KEY = 'pv-clientes-recientes'
-const MAX_PRODUCTOS = 9999
 
 type VistaProductos = 'lista' | 'grid'
 type Pantalla = 'venta' | 'pago'
@@ -20,8 +21,11 @@ export function PosPage() {
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
   const soloLectura = cajaHabilitada && !cajaAbierta
 
-  const [productos, setProductos] = useState<ProductoJoin[]>([])
+  const [categorias, setCategorias] = useState<Categoria[]>([])
   const [busqueda, setBusqueda] = useState('')
+  const [busquedaDebounced, setBusquedaDebounced] = useState('')
+  const [categoriaFiltro, setCategoriaFiltro] = useState('')
+  const [orderBy, setOrderBy] = useState('nombre ASC')
   const [vista, setVista] = useState<VistaProductos>('lista')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const [tasa, setTasa] = useState(1)
@@ -37,6 +41,38 @@ export function PosPage() {
   const [ventaExitosa, setVentaExitosa] = useState(false)
 
   const busquedaRef = useRef<HTMLInputElement>(null)
+  const gridScrollRef = useRef<HTMLDivElement | null>(null)
+
+  // Debounce de búsqueda: 300ms antes de disparar la query al servidor
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaDebounced(busqueda), 300)
+    return () => clearTimeout(t)
+  }, [busqueda])
+
+  const filters = useMemo(
+    () => ({
+      search: busquedaDebounced,
+      categoriaId: categoriaFiltro || null,
+      orderBy,
+    }),
+    [busquedaDebounced, categoriaFiltro, orderBy]
+  )
+
+  const { items, loading, loadingMore, error, sentinelRef } = useInfiniteScroll({
+    fetcher: async ({ offset, pageSize, search, categoriaId, orderBy }) => {
+      const res = await listarProductos({
+        search,
+        categoriaId,
+        soloActivos: true,
+        offset,
+        pageSize,
+        orderBy,
+      })
+      return { items: res.items, hasMore: res.hasMore }
+    },
+    filters,
+    root: gridScrollRef.current,
+  })
 
   const totalUsd = useMemo(
     () => carrito.reduce((acc, it) => acc + Number(it.producto.precio_usd) * it.cantidad, 0),
@@ -45,9 +81,9 @@ export function PosPage() {
   const totalBs = totalUsd * tasa
 
   useEffect(() => {
-    listarProductos({ soloActivos: true, offset: 0, pageSize: MAX_PRODUCTOS })
-      .then((r) => setProductos(r.items))
-      .catch(() => setProductos([]))
+    listarCategorias()
+      .then(setCategorias)
+      .catch(() => {})
 
     obtenerMiEmpresa()
       .then((emp) => {
@@ -95,23 +131,8 @@ export function PosPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [pantalla])
 
-  const sugerencias = useMemo(
-    () =>
-      productos
-        .filter((p) => p.nombre.toLowerCase().includes(busqueda.toLowerCase()))
-        .slice(0, 8),
-    [productos, busqueda]
-  )
-
-  const productosFiltrados = useMemo(
-    () =>
-      busqueda
-        ? productos.filter((p) =>
-            p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-          )
-        : productos,
-    [productos, busqueda]
-  )
+  // Sugerencias: primeros 8 de la lista ya cargada (para vista lista)
+  const sugerencias = useMemo(() => items.slice(0, 8), [items])
 
   function agregarAlCarrito(p: ProductoJoin) {
     setCarrito((prev) => {
@@ -265,6 +286,18 @@ export function PosPage() {
                   aria-label="Buscar producto"
                 />
               </label>
+              <select
+                className="filtro-cat"
+                value={categoriaFiltro}
+                onChange={(e) => setCategoriaFiltro(e.target.value)}
+                aria-label="Filtrar por categoría"
+              >
+                <option value="">Todas</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+              <SortDropdown value={orderBy} onChange={setOrderBy} />
               <div className="pos-view-toggle" role="group" aria-label="Vista">
                 <button
                   className={vista === 'lista' ? 'active' : ''}
@@ -285,8 +318,12 @@ export function PosPage() {
               </div>
             </div>
 
-            {vista === 'lista' ? (
-              <div className="pos-sugerencias">
+            {loading ? (
+              <p className="pos-vacio">Cargando productos…</p>
+            ) : error ? (
+              <p className="pos-vacio" style={{ color: '#dc2626' }}>{error}</p>
+            ) : vista === 'lista' ? (
+              <div className="pos-sugerencias" ref={gridScrollRef}>
                 {sugerencias.map((p) => (
                   <button
                     key={p.id}
@@ -309,10 +346,11 @@ export function PosPage() {
                 {sugerencias.length === 0 && (
                   <p className="pos-vacio">Sin productos que coincidan.</p>
                 )}
+                <div ref={sentinelRef} className="sentinela" />
               </div>
             ) : (
-              <div className="pos-productos-grid">
-                {productosFiltrados.map((p) => {
+              <div className="pos-productos-grid" ref={gridScrollRef}>
+                {items.map((p) => {
                   const st = p.stock_actual <= 0 ? 'off' : p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo ? 'warn' : 'ok'
                   return (
                     <button
@@ -349,11 +387,14 @@ export function PosPage() {
                     </button>
                   )
                 })}
-                {productosFiltrados.length === 0 && (
+                {items.length === 0 && (
                   <p className="pos-vacio">Sin productos que coincidan.</p>
                 )}
+                <div ref={sentinelRef} className="sentinela" />
               </div>
             )}
+
+            {loadingMore && <p className="loading-more">Cargando más…</p>}
           </section>
 
           <div className="pos-wizard-panel">

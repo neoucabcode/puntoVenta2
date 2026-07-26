@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   listarProductos,
@@ -11,7 +11,6 @@ import {
   aplicarAjusteStock,
   registrarHistorial,
   obtenerHistorial,
-  PAGE_SIZE,
   type ProductoJoin,
   type Categoria,
   type HistorialEntry,
@@ -22,6 +21,8 @@ import { SkuConfigForm } from '../components/SkuConfigForm'
 import { DataTable } from '../components/DataTable'
 import { ConfirmarEliminarModal } from '../components/ConfirmarEliminarModal'
 import { HistorialModal } from '../components/HistorialModal'
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
+import { SortDropdown } from '../components/SortDropdown'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
 
 const MOTIVOS_AJUSTE = ['conteo físico', 'merma', 'devolución', 'otro'] as const
@@ -39,13 +40,13 @@ type DeleteTarget = { producto: ProductoJoin; mode: 'desactivar' | 'eliminar' }
 export function InventarioPage() {
   const { inventarioHabilitado, esAdmin } = useUsuarioRol()
 
-  const [productos, setProductos] = useState<ProductoJoin[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
   const [vista, setVista] = useState<'grid' | 'lista'>('lista')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [orderBy, setOrderBy] = useState('nombre ASC')
+  const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null)
+  const [actionError, setActionError] = useState('')
 
   const [editId, setEditId] = useState<string | null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
@@ -67,80 +68,39 @@ export function InventarioPage() {
 
   const [skuConfigOpen, setSkuConfigOpen] = useState(false)
 
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const sentinelaRef = useRef<HTMLDivElement | null>(null)
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
-  const offsetRef = useRef(0)
-  const cargandoRef = useRef(false)
 
-  const cargarPagina = useCallback(
-    async (reset: boolean) => {
-      if (cargandoRef.current) return
-      cargandoRef.current = true
-      if (reset) {
-        setLoading(true)
-      } else {
-        setLoadingMore(true)
-      }
-      setError('')
-      try {
-        const offset = reset ? 0 : offsetRef.current
-        const [prods, cats] = await Promise.all([
-          listarProductos({
-            search,
-            categoriaId: categoriaFiltro || null,
-            soloActivos: false,
-            offset,
-            pageSize: PAGE_SIZE,
-          }),
-          listarCategorias(),
-        ])
-        if (reset) {
-          setProductos(prods.items)
-          offsetRef.current = prods.items.length
-        } else {
-          setProductos((prev) => [...prev, ...prods.items])
-          offsetRef.current += prods.items.length
-        }
-        setHasMore(prods.hasMore)
-        setCategorias(cats)
-      } catch (err) {
-        setError((err as Error).message)
-      } finally {
-        cargandoRef.current = false
-        if (reset) {
-          setLoading(false)
-        } else {
-          setLoadingMore(false)
-        }
-      }
-    },
-    [search, categoriaFiltro]
+  // Memoizar filtros: el hook solo resetea offset cuando cambia la referencia
+  const filters = useMemo(
+    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos: false, orderBy }),
+    [search, categoriaFiltro, orderBy]
   )
 
+  const { items, loadingMore, loading, error, sentinelRef, reset } = useInfiniteScroll({
+    fetcher: async ({ offset, pageSize, search, categoriaId, soloActivos, orderBy }) => {
+      const res = await listarProductos({
+        search, categoriaId, soloActivos, offset, pageSize, orderBy,
+      })
+      return { items: res.items, hasMore: res.hasMore }
+    },
+    filters,
+    root: scrollRoot,
+  })
+
+  // Actualizar root del IntersectionObserver cuando cambia la vista
   useEffect(() => {
-    cargarPagina(true)
-  }, [cargarPagina])
+    setScrollRoot(vista === 'grid' ? gridScrollRef.current : listaScrollRef.current)
+  }, [vista])
 
   useEffect(() => {
-    const node = sentinelaRef.current
-    if (!node) return
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !cargandoRef.current) {
-          cargarPagina(false)
-        }
-      },
-      { root: vista === 'grid' ? gridScrollRef.current : listaScrollRef.current, rootMargin: '200px' }
-    )
-    obs.observe(node)
-    return () => obs.disconnect()
-  }, [hasMore, cargarPagina, vista])
+    listarCategorias()
+      .then(setCategorias)
+      .catch((err) => setActionError((err as Error).message))
+  }, [])
 
-  const valuacion = useMemo(() => calcularValuacion(productos), [productos])
-  const bajos = useMemo(() => productos.filter(esBajoStock), [productos])
+  const valuacion = useMemo(() => calcularValuacion(items), [items])
+  const bajos = useMemo(() => items.filter(esBajoStock), [items])
 
   function onDesactivarClick(p: ProductoJoin) {
     setDeleteTarget({ producto: p, mode: 'desactivar' })
@@ -153,26 +113,24 @@ export function InventarioPage() {
   async function onConfirmDelete() {
     if (!deleteTarget) return
     setDeleteSaving(true)
+    setActionError('')
     try {
       const empresaId = await obtenerMiEmpresaId()
       if (deleteTarget.mode === 'desactivar') {
         await desactivarProducto(deleteTarget.producto.id)
-        setProductos((prev) =>
-          prev.map((x) => (x.id === deleteTarget.producto.id ? { ...x, activo: false } : x))
-        )
         if (empresaId) {
           registrarHistorial(empresaId, deleteTarget.producto.id, deleteTarget.producto.nombre, 'desactivado', {})
         }
       } else {
         await eliminarProducto(deleteTarget.producto.id)
-        setProductos((prev) => prev.filter((x) => x.id !== deleteTarget.producto.id))
         if (empresaId) {
           registrarHistorial(empresaId, deleteTarget.producto.id, deleteTarget.producto.nombre, 'eliminado', {})
         }
       }
       setDeleteTarget(null)
+      reset()
     } catch (err) {
-      setError((err as Error).message)
+      setActionError((err as Error).message)
     } finally {
       setDeleteSaving(false)
     }
@@ -181,13 +139,13 @@ export function InventarioPage() {
   async function onReactivar(p: ProductoJoin) {
     try {
       await reactivarProducto(p.id)
-      setProductos((prev) => prev.map((x) => (x.id === p.id ? { ...x, activo: true } : x)))
       const empresaId = await obtenerMiEmpresaId()
       if (empresaId) {
         registrarHistorial(empresaId, p.id, p.nombre, 'reactivado', {})
       }
+      reset()
     } catch (err) {
-      setError((err as Error).message)
+      setActionError((err as Error).message)
     }
   }
 
@@ -200,7 +158,7 @@ export function InventarioPage() {
       setCategoriaFiltro(c.id)
       setNuevaCategoria('')
     } catch (err) {
-      setError((err as Error).message)
+      setActionError((err as Error).message)
     }
   }
 
@@ -224,7 +182,7 @@ export function InventarioPage() {
       })
       const empresaId = await obtenerMiEmpresaId()
       if (empresaId) {
-        const ajustado = productos.find((p) => p.id === ajusteProductoId)
+        const ajustado = items.find((p) => p.id === ajusteProductoId)
         if (ajustado) {
           registrarHistorial(empresaId, ajustado.id, ajustado.nombre, 'ajuste_stock', {
             cantidad,
@@ -236,7 +194,7 @@ export function InventarioPage() {
       setAjusteProductoId('')
       setAjusteCantidad('')
       setAjusteMotivo(MOTIVOS_AJUSTE[0])
-      await cargarPagina(true)
+      reset()
     } catch (err) {
       setAjusteError((err as Error).message)
     } finally {
@@ -254,7 +212,7 @@ export function InventarioPage() {
         setHistorialEntries(entries)
       }
     } catch (err) {
-      setError((err as Error).message)
+      setActionError((err as Error).message)
     } finally {
       setHistorialLoading(false)
     }
@@ -271,14 +229,14 @@ export function InventarioPage() {
     )
   }
 
-  const edicion = editId ? productos.find((p) => p.id === editId) ?? null : null
+  const edicion = editId ? items.find((p) => p.id === editId) ?? null : null
 
   return (
     <div className="inventario">
       <header className="inv-toolbar">
         <div className="inv-head">
           <p className="inv-sub">
-            {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+            {items.length} {items.length === 1 ? 'producto' : 'productos'}
             {bajos.length > 0 && (
               <span className="inv-badge-bajo resumen">
                 {bajos.length} con bajo stock
@@ -298,6 +256,7 @@ export function InventarioPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
+          <SortDropdown value={orderBy} onChange={setOrderBy} />
         </div>
         <div className="inv-acciones">
           <input
@@ -351,14 +310,14 @@ export function InventarioPage() {
 
       <div className="inv-body">
         <main className="inv-main">
-          {error && <p className="error">{error}</p>}
+          {(error || actionError) && <p className="error">{error || actionError}</p>}
 
           {loading ? (
             <p>Cargando…</p>
           ) : vista === 'grid' ? (
             <div className="productos-grid-scroll" ref={gridScrollRef}>
               <div className="productos-grid">
-                {productos.map((p) => (
+                {items.map((p) => (
                   <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
                     <div className="card-img">
                       {p.imagen_url ? (
@@ -415,67 +374,67 @@ export function InventarioPage() {
                     </div>
                   </article>
                 ))}
-                <div ref={sentinelaRef} className="sentinela" />
+                <div ref={sentinelRef} className="sentinela" />
               </div>
             </div>
           ) : (
             <DataTable
-        columnas={[
-          { key: 'sku', titulo: 'SKU', render: (p: ProductoJoin) => <code>{p.sku ?? '—'}</code> },
-          { key: 'nombre', titulo: 'Nombre', render: (p: ProductoJoin) => p.nombre },
-          { key: 'categoria', titulo: 'Categoría', render: (p: ProductoJoin) => p.categoria?.nombre ?? '—' },
-          {
-            key: 'costo', titulo: 'Costo', align: 'right',
-            render: (p: ProductoJoin) => <span className="num-tab">{fmtUsd(p.costo_usd)}</span>,
-          },
-          {
-            key: 'precio', titulo: 'Precio', align: 'right',
-            render: (p: ProductoJoin) => <span className="num-tab">{fmtUsd(p.precio_usd)}</span>,
-          },
-          {
-            key: 'stock', titulo: 'Stock', align: 'right',
-            render: (p: ProductoJoin) => (
-              <span className="inv-stock">
-                <span className="num-tab">{p.stock_actual}</span>
-                {esBajoStock(p) && (
-                  <span className="inv-badge-bajo" title={`Por debajo del mínimo (${p.stock_minimo})`}>
-                    <span className="material-symbols-outlined">warning</span> Bajo stock
-                  </span>
-                )}
-              </span>
-            ),
-          },
-          {
-            key: 'acciones', titulo: '', hideHeader: true, className: 'dt-actions',
-            render: (p: ProductoJoin) => (
-              <>
-                <button onClick={() => setEditId(p.id)} title="Editar">
-                  <span className="material-symbols-outlined">edit</span>
-                </button>
-                {p.activo ? (
-                  <>
-                    <button onClick={() => onDesactivarClick(p)} title="Desactivar">
-                      <span className="material-symbols-outlined">visibility_off</span>
-                    </button>
-                    <button onClick={() => onEliminarClick(p)} title="Eliminar permanentemente">
-                      <span className="material-symbols-outlined">delete</span>
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => void onReactivar(p)} title="Reactivar">
-                    <span className="material-symbols-outlined">check_circle</span>
+          columnas={[
+            { key: 'sku', titulo: 'SKU', render: (p: ProductoJoin) => <code>{p.sku ?? '—'}</code> },
+            { key: 'nombre', titulo: 'Nombre', render: (p: ProductoJoin) => p.nombre },
+            { key: 'categoria', titulo: 'Categoría', render: (p: ProductoJoin) => p.categoria?.nombre ?? '—' },
+            {
+              key: 'costo', titulo: 'Costo', align: 'right',
+              render: (p: ProductoJoin) => <span className="num-tab">{fmtUsd(p.costo_usd)}</span>,
+            },
+            {
+              key: 'precio', titulo: 'Precio', align: 'right',
+              render: (p: ProductoJoin) => <span className="num-tab">{fmtUsd(p.precio_usd)}</span>,
+            },
+            {
+              key: 'stock', titulo: 'Stock', align: 'right',
+              render: (p: ProductoJoin) => (
+                <span className="inv-stock">
+                  <span className="num-tab">{p.stock_actual}</span>
+                  {esBajoStock(p) && (
+                    <span className="inv-badge-bajo" title={`Por debajo del mínimo (${p.stock_minimo})`}>
+                      <span className="material-symbols-outlined">warning</span> Bajo stock
+                    </span>
+                  )}
+                </span>
+              ),
+            },
+            {
+              key: 'acciones', titulo: '', hideHeader: true, className: 'dt-actions',
+              render: (p: ProductoJoin) => (
+                <>
+                  <button onClick={() => setEditId(p.id)} title="Editar">
+                    <span className="material-symbols-outlined">edit</span>
                   </button>
-                )}
-              </>
-            ),
-          },
-        ]}
-        filas={productos}
+                  {p.activo ? (
+                    <>
+                      <button onClick={() => onDesactivarClick(p)} title="Desactivar">
+                        <span className="material-symbols-outlined">visibility_off</span>
+                      </button>
+                      <button onClick={() => onEliminarClick(p)} title="Eliminar permanentemente">
+                        <span className="material-symbols-outlined">delete</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => void onReactivar(p)} title="Reactivar">
+                      <span className="material-symbols-outlined">check_circle</span>
+                    </button>
+                  )}
+                </>
+              ),
+            },
+          ]}
+        filas={items}
         rowKey={(p) => p.id}
         isInactivo={(p) => !p.activo}
         empty="No hay productos para los filtros actuales"
         scrollRef={listaScrollRef}
-        after={<div ref={sentinelaRef} className="sentinela" />}
+        after={<div ref={sentinelRef} className="sentinela" />}
       />)}
 
           {loadingMore && <p className="loading-more">Cargando más…</p>}
@@ -524,7 +483,7 @@ export function InventarioPage() {
                 }
               }
             }
-            void cargarPagina(true)
+            reset()
           }}
         />
       )}
@@ -541,7 +500,7 @@ export function InventarioPage() {
                 Producto
                 <select value={ajusteProductoId} onChange={(e) => setAjusteProductoId(e.target.value)}>
                   <option value="">Selecciona un producto…</option>
-                  {productos.map((p) => (
+                  {items.map((p) => (
                     <option key={p.id} value={p.id}>{p.nombre} ({p.stock_actual})</option>
                   ))}
                 </select>

@@ -1,107 +1,70 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import {
   listarProductos,
   listarCategorias,
-  PAGE_SIZE,
   type ProductoJoin,
   type Categoria,
 } from '../lib/productos'
 import { obtenerCatalogo } from '../lib/cacheCatalogo'
 import { DataTable } from '../components/DataTable'
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
+import { SortDropdown } from '../components/SortDropdown'
 
 export function CatalogoPage() {
-  const [productos, setProductos] = useState<ProductoJoin[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
   const [soloActivos, setSoloActivos] = useState(true)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [error, setError] = useState('')
   const [usandoCache, setUsandoCache] = useState(false)
-  const sentinelaRef = useRef<HTMLDivElement | null>(null)
+  const [vista, setVista] = useState<'grid' | 'lista'>('grid')
+  const [orderBy, setOrderBy] = useState('nombre ASC')
+  const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null)
+  const [categoriasError, setCategoriasError] = useState('')
+
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
-  const offsetRef = useRef(0)
-  const cargandoRef = useRef(false)
-  const [vista, setVista] = useState<'grid' | 'lista'>('grid')
+
+  // Memoizar filtros: el hook solo resetea offset cuando cambia la referencia
+  const filters = useMemo(
+    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos, orderBy }),
+    [search, categoriaFiltro, soloActivos, orderBy]
+  )
 
   // El catálogo es SOLO LECTURA de forma permanente (Slice 1): lista, búsqueda y
   // filtrado. La edición de productos/categorías vive en `/inventario`.
-  const cargarPagina = useCallback(
-    async (reset: boolean) => {
-      if (cargandoRef.current) return
-      cargandoRef.current = true
-      if (reset) {
-        setLoading(true)
-      } else {
-        setLoadingMore(true)
-      }
-      setError('')
-      try {
-        const offset = reset ? 0 : offsetRef.current
-        // W1: usa la caché local cuando está offline o falla Supabase; marca
-        // `desdeCache` para mostrar el indicador de catálogo sin conexión.
-        const res = await obtenerCatalogo(
-          () =>
-            listarProductos({
-              search,
-              categoriaId: categoriaFiltro || null,
-              soloActivos,
-              offset,
-              pageSize: PAGE_SIZE,
-            }),
-          { guardarEnCache: reset }
-        )
-        if (reset) {
-          setProductos(res.items)
-          offsetRef.current = res.items.length
-        } else {
-          setProductos((prev) => [...prev, ...res.items])
-          offsetRef.current += res.items.length
-        }
-        setHasMore(res.hasMore)
-        setUsandoCache(res.desdeCache)
-      } catch (err) {
-        setError((err as Error).message)
-        setUsandoCache(false)
-      } finally {
-        cargandoRef.current = false
-        if (reset) {
-          setLoading(false)
-        } else {
-          setLoadingMore(false)
-        }
-      }
+  const { items, loadingMore, loading, error, sentinelRef } = useInfiniteScroll({
+    fetcher: async ({ offset, pageSize, search, categoriaId, soloActivos, orderBy }) => {
+      // W1: usa la caché local cuando está offline o falla Supabase; marca
+      // `desdeCache` para mostrar el indicador de catálogo sin conexión.
+      const res = await obtenerCatalogo(
+        () =>
+          listarProductos({
+            search,
+            categoriaId,
+            soloActivos,
+            offset,
+            pageSize,
+            orderBy,
+          }),
+        { guardarEnCache: offset === 0 }
+      )
+      setUsandoCache(res.desdeCache)
+      return { items: res.items, hasMore: res.hasMore }
     },
-    [search, categoriaFiltro, soloActivos]
-  )
+    filters,
+    root: scrollRoot,
+  })
 
+  // Actualizar root del IntersectionObserver cuando cambia la vista
   useEffect(() => {
-    cargarPagina(true)
-  }, [cargarPagina])
+    setScrollRoot(vista === 'grid' ? gridScrollRef.current : listaScrollRef.current)
+  }, [vista])
 
   useEffect(() => {
     listarCategorias()
       .then(setCategorias)
-      .catch((err) => setError((err as Error).message))
+      .catch((err) => setCategoriasError((err as Error).message))
   }, [])
-
-  useEffect(() => {
-    const node = sentinelaRef.current
-    if (!node) return
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !cargandoRef.current) {
-          cargarPagina(false)
-        }
-      },
-      { root: vista === 'grid' ? gridScrollRef.current : listaScrollRef.current, rootMargin: '200px' }
-    )
-    obs.observe(node)
-    return () => obs.disconnect()
-  }, [hasMore, cargarPagina, vista])
 
   function stockEstado(p: ProductoJoin): 'ok' | 'warn' | 'off' {
     if (!p.activo) return 'off'
@@ -120,7 +83,7 @@ export function CatalogoPage() {
       <header className="catalogo-toolbar">
         <div className="catalogo-head">
           <p className="catalogo-sub">
-            {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+            {items.length} {items.length === 1 ? 'producto' : 'productos'}
           </p>
         </div>
         <div className="catalogo-filtros">
@@ -135,6 +98,7 @@ export function CatalogoPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
+          <SortDropdown value={orderBy} onChange={setOrderBy} />
         </div>
         <div className="catalogo-head-actions">
           <input
@@ -170,19 +134,19 @@ export function CatalogoPage() {
 
       <div className="catalogo-body">
         <main className="catalogo-main">
-           {error && <p className="error">{error}</p>}
+           {(error || categoriasError) && <p className="error">{error || categoriasError}</p>}
            {usandoCache && (
-             <p className="aviso-cache">catálogo sin conexión (cached)</p>
-           )}
+            <p className="aviso-cache">catálogo sin conexión (cached)</p>
+          )}
 
           {loading ? (
             <p>Cargando…</p>
-          ) : productos.length === 0 ? (
+          ) : items.length === 0 ? (
             <p>No hay productos para los filtros actuales</p>
           ) : vista === 'grid' ? (
             <div className="productos-grid-scroll" ref={gridScrollRef}>
               <div className="productos-grid">
-                {productos.map((p) => {
+                {items.map((p) => {
                   const st = stockEstado(p)
                   return (
                     <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
@@ -216,7 +180,7 @@ export function CatalogoPage() {
                     </article>
                   )
                 })}
-                <div ref={sentinelaRef} className="sentinela" />
+                <div ref={sentinelRef} className="sentinela" />
               </div>
             </div>
           ) : (
@@ -249,12 +213,12 @@ export function CatalogoPage() {
                   render: (p: ProductoJoin) => <span className={`badge ${stockEstado(p)}`}>{stockLabel[stockEstado(p)]}</span>,
                 },
               ]}
-              filas={productos}
+              filas={items}
               rowKey={(p) => p.id}
               isInactivo={(p) => !p.activo}
               empty="No hay productos para los filtros actuales"
               scrollRef={listaScrollRef}
-              after={<div ref={sentinelaRef} className="sentinela" />}
+              after={<div ref={sentinelRef} className="sentinela" />}
             />
           )}
 

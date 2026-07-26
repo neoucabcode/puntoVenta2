@@ -86,7 +86,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-24, session: verificación estado real + actualización HANDOFF)
+## Estado actual (última actualización: 2026-007-26, session: scroll infinito + filtros - implementación completa)
 
 ### Producción desplegada
 - **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
@@ -111,6 +111,17 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **Slice 5:** Presupuestos
 - **Slice 6:** Hardware (lector + impresora)
 - Documentación del cambio en `openspec/changes/rediseno-ui-caja-inventario/`
+
+### Scroll infinito + filtros (completado 2026-07-26)
+- **Cambio SDD:** `scroll-infinito-filtros-generales` — proposal/specs/design/tasks/apply/verify
+- **SQL:** `patch_08_ordenar_productos_rpc.sql` — RPC `buscar_productos` con param `p_order_by` (whitelist seguro). **PENDIENTE APLICAR EN SUPABASE.**
+- **Hook reutilizable:** `useInfiniteScroll.ts` — IntersectionObserver, reset en cambio de filtros, manejo de error.
+- **Componente:** `SortDropdown.tsx` — 4 opciones (Nombre A-Z/Z-A, Precio ↑/↓), accessible.
+- **Pages integradas:** CatalogoPage, InventarioPage, PosPage — todas usan el hook compartido.
+- **PosPage mejorado:** búsqueda server-side con debounce 300ms, filtro de categoría, sort dropdown, scroll infinito (reemplaza carga masiva de 9999 productos).
+- **Tests:** 64/64 pass (15 test files). Nuevos: `useInfiniteScroll.test.ts` (2 tests), `SortDropdown.test.tsx` (6 tests).
+- **Build:** `npm run build` exitoso.
+- **Limpieza:** imports sin usar eliminados de las 3 pages, archivos `borrador/` eliminados.
 
 ### Pendiente del usuario
 - ✅ **W1:** `patch_09_inventario.sql` — APLICADO.
@@ -270,6 +281,7 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 3. **Llevar lenguaje visual del catálogo a Login/Registro/Venta** para consistencia.
 4. **Slices 3-6 del rediseño UI** — pagos combinados, devoluciones, presupuestos, hardware.
 5. **Consistencia visual** — Login/Registro/Venta con el mismo estilo del catálogo.
+6. **Aplicar SQL** `patch_08_ordenar_productos_rpc.sql` en Supabase Dashboard → SQL Editor.
 
 ## Bugs abiertos (2026-07-24 verificado)
 1. ~~**ImageEditor crash**~~ — **RESUELTO** (2026-07-23). Causa raíz: `aspect={NaN}` en el Cropper original (commit 32dcc23). NaN causa división por cero en el posicionamiento interno de react-easy-crop → error no manejado → pantalla blanca. Fixes aplicados: `aspect={4/3}`, ErrorBoundary, loadImage sin crossOrigin en blob URLs, scaleX/scaleY para coordenadas de crop, errores visibles en UI. Ver memoria `bugfix/imageeditor-crash`.

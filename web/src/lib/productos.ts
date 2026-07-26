@@ -79,6 +79,7 @@ export async function listarProductos(opts?: {
   soloActivos?: boolean
   offset?: number
   pageSize?: number
+  orderBy?: string
 }): Promise<ListarResult> {
   if (!supabase) {
     const res = await listarProductosMock(opts)
@@ -97,6 +98,7 @@ export async function listarProductos(opts?: {
     p_solo_activos: opts?.soloActivos ?? true,
     p_limit: limit,
     p_offset: offset,
+    p_order_by: opts?.orderBy ?? 'nombre ASC',
   })
   if (error) throw error
 
