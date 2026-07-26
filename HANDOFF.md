@@ -67,12 +67,12 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **RLS:** activo, aislamiento por empresa_id
 - **PWA:** sí (service worker + manifest)
 
-### Snapshot de BD (2026-07-24 verificado)
+### Snapshot de BD (2026-07-26 verificado)
 | Productos | Con imagen | Categorías | Usuarios | Admins | Cajas abiertas | Ventas pendientes |
 |-----------|-----------|------------|----------|--------|----------------|-------------------|
-| 589 | 281 | 8 | 1 | 1 | 1 | 0 |
+| 586 | 569 (97.1%) | 8 | 1 | 1 | 0 | 0 |
 
-> **Objetos en Storage (bucket `productos`):** 281 (coincide con `productos_con_imagen`). Convención: `{empresa_id}/{sku}.webp` — verificado.
+> **Objetos en Storage (bucket `productos`):** 577 (vs 569 con imagen — 8 huérfanas o múltiples archivos). Convención: `{empresa_id}/{sku}.webp` — verificado.
 >
 > Correr este query al inicio de cada sesión para mantener al día al asistente:
 > ```sql
@@ -129,7 +129,7 @@ feature-branch → develop (dev) → probar → merge a master → producción
 - **SKU Configurable:** DONE. Generación automática por empresa, fuzzy matching, 3 plantillas. `patch_11_sku_configurable.sql` aplicado en BD.
 - **Modo Caja Offline V1:** DONE. Sesión por dispositivo, cola IndexedDB, auto-sync silencioso, idempotencia. `patch_08` aplicado en BD.
 - **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage: `{empresa_id}/{sku}.webp` (verificado en producción), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername(). **2026-07-23 session 2:** (4) Crop mismatch fix: al hacer zoom out para ver imagen completa, el output ahora muestra la imagen entera (no recortada) cuando el crop cubre ≥98% de ambas dimensiones, (5) Paste button CSS fix: variables --surface/--text reemplazadas por --surface-1/--text-primary, (6) ClipboardItem API fix: item.types + getType() en vez de item.items.
-- **Estado BD:** 589 productos, 8 categorías, 281 con imagen (281 objetos en Storage verificado).
+- **Estado BD:** 586 productos, 8 categorías, 569 con imagen (577 objetos en Storage verificado).
 
 ### Pendiente (Slices 3-6 del rediseño UI)
 - **Slice 3:** Pagos combinados + cliente + cuenta corriente
@@ -152,8 +152,8 @@ feature-branch → develop (dev) → probar → merge a master → producción
 ### Pendiente del usuario
 - ✅ **W1:** `patch_09_inventario.sql` — APLICADO.
 - ✅ **W2:** Rol admin asignado.
-- ✅ **Imágenes en Storage:** 281 objetos (bucket `productos`, convención `{empresa_id}/{sku}.webp` verificado).
-- ⏳ **308 productos sin imagen** (589 total - 281 con imagen) — el usuario las sube desde Inventario → ProductoForm.
+- ✅ **Imágenes en Storage:** 577 objetos (bucket `productos`, convención `{empresa_id}/{sku}.webp` verificado).
+- ⏳ **17 productos sin imagen** (586 total - 569 con imagen) — el usuario las sube desde Inventario → ProductoForm.
 
 ## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
