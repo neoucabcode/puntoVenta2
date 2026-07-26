@@ -8,12 +8,15 @@ import { useUIStore } from '../lib/ui-store'
 import { useCajaStore } from '../store/useCajaStore'
 import { abrirCaja, cerrarCaja } from '../lib/caja'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
+import { useModulos } from '../hooks/useModulos'
 
-const navItems = [
-  { to: '/', label: 'Venta', icon: 'point_of_sale', adminOnly: false },
-  { to: '/catalogo', label: 'Catálogo', icon: 'inventory_2', adminOnly: false },
-  { to: '/inventario', label: 'Inventario', icon: 'inventory', adminOnly: true },
-] as const
+type NavItem = { to: string; label: string; icon: string; modulo?: string; adminOnly?: boolean }
+
+const navItems: NavItem[] = [
+  { to: '/', label: 'Venta', icon: 'point_of_sale', modulo: 'venta' },
+  { to: '/catalogo', label: 'Catálogo', icon: 'inventory_2' },
+  { to: '/inventario', label: 'Inventario', icon: 'inventory', modulo: 'inventario', adminOnly: true },
+]
 
 export function Layout({ children }: { children: ReactNode }) {
   const { session } = useAuth()
@@ -30,7 +33,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
   const { inventarioHabilitado } = useUsuarioRol()
-  const items = navItems.filter((i) => !i.adminOnly || inventarioHabilitado)
+  const { estaHabilitado } = useModulos()
+
+  // Filtrar nav: Catálogo siempre visible; otros módulos requieren habilitación
+  const items = navItems.filter((i) => {
+    if (!i.modulo) return true // sin módulo requerido → siempre visible (Catálogo)
+    if (i.adminOnly && !inventarioHabilitado) return false
+    return estaHabilitado(i.modulo)
+  })
 
   useEffect(() => {
     if (session) obtenerMiEmpresa().then(setEmpresa).catch(() => setEmpresa(null))

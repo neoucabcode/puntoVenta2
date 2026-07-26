@@ -5,10 +5,15 @@ import { Layout } from './Layout'
 
 const h = vi.hoisted(() => ({
   rol: { rol: 'admin', esAdmin: true, inventarioHabilitado: true, loading: false },
+  modulos: { modulos: [], loading: false, estaHabilitado: () => true, refrescar: async () => {} },
 }))
 
 vi.mock('../hooks/useUsuarioRol', () => ({
   useUsuarioRol: () => h.rol,
+}))
+
+vi.mock('../hooks/useModulos', () => ({
+  useModulos: () => h.modulos,
 }))
 
 describe('Layout nav (3 secciones)', () => {

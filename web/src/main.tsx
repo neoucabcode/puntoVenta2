@@ -9,6 +9,7 @@ import { RegistroPage } from './pages/RegistroPage'
 import { PosPage } from './pages/PosPage'
 import { CatalogoPage } from './pages/CatalogoPage'
 import { RequireAuth } from './components/RequireAuth'
+import { RequireModulo } from './components/RequireModulo'
 const InventarioPage = lazy(() =>
   import('./pages/InventarioPage').then((m) => ({ default: m.InventarioPage }))
 )
@@ -48,9 +49,11 @@ function Root() {
         path="/"
         element={
           <RequireAuth>
-            <Layout>
-              <PosPage />
-            </Layout>
+            <RequireModulo modulo="venta">
+              <Layout>
+                <PosPage />
+              </Layout>
+            </RequireModulo>
           </RequireAuth>
         }
       />
@@ -68,11 +71,13 @@ function Root() {
         path="/inventario"
         element={
           <RequireAuth>
-            <Layout>
-              <Suspense fallback={<p className="center">Cargando…</p>}>
-                <InventarioPage />
-              </Suspense>
-            </Layout>
+            <RequireModulo modulo="inventario">
+              <Layout>
+                <Suspense fallback={<p className="center">Cargando…</p>}>
+                  <InventarioPage />
+                </Suspense>
+              </Layout>
+            </RequireModulo>
           </RequireAuth>
         }
       />
