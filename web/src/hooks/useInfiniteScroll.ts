@@ -118,7 +118,7 @@ export function useInfiniteScroll<T, F extends Record<string, unknown>>({
     )
     obs.observe(node)
     return () => obs.disconnect()
-  }, [hasMore, cargarPagina, root, rootMargin])
+  }, [hasMore, cargarPagina, root, rootMargin, loading])
 
   const reset = useCallback(() => {
     offsetRef.current = 0
