@@ -86,15 +86,41 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-007-26, session: scroll infinito + filtros - implementación completa)
+## Estado actual (última actualización: 2026-07-26, session: multi-environment + módulos)
+
+### Arquitectura multi-entorno (2026-07-26)
+
+| Entorno | Supabase | Netlify | Branch | URL |
+|---|---|---|---|---|
+| **Desarrollo** | `pvopcajqersioqlmccwg` | `flourishing-chebakia-0d56e1` | `develop` | `https://flourishing-chebakia-0d56e1.netlify.app` |
+| **Producción** | `bczpfyguamysdnihwzvl` | `puntoventa2-prod` | `master` | `https://puntoventa2-prod.netlify.app` |
+
+**Flujo de código:**
+```
+feature-branch → develop (dev) → probar → merge a master → producción
+```
+
+**Producción — Empresa:** FerrehogarMart (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`)
+- **Módulos habilitados:** solo `catalogo` (resto deshabilitados hasta aprobación)
+- **Usuarios:** pendiente crear 1 admin + 2 vendedores
+- **SQL:** `supabase/production_migration.sql` + `supabase/production_seed.sql` aplicados
+
+**Desarrollo — Empresa:** FerrehogarMart (mismo ID, ambos entornos)
+- **Módulos:** todos habilitados (catálogo, venta, inventario, caja)
+- **Usuarios:** 1 admin (dueño)
+
+### Sistema de módulos (feature flags)
+- **Tabla:** `empresa_modulos` — `(empresa_id, modulo, habilitado)`
+- **Hook:** `useModulos` — carga módulos habilitados desde BD
+- **Protección de rutas:** `RequireModulo` — redirige a `/catalogo` si módulo deshabilitado
+- **Nav dinámica:** solo muestra items de módulos habilitados
+- **Toggle:** desde Supabase Dashboard o futura UI admin
 
 ### Producción desplegada
-- **Plataforma:** Netlify (flourishing-chebakia-0d56e1)
-- **URL:** `https://flourishing-chebakia-0d56e1.netlify.app`
-- **Rama deployada:** `master`
+- **Plataforma:** Netlify
 - **Build:** `cd web && npm install && npm run build`
 - **Publish:** `web/dist`
-- **Variables de entorno:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (configuradas en Netlify dashboard)
+- **Variables de entorno:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 - **RLS:** activo, aislamiento por `empresa_id`
 - **PWA:** sí (service worker + manifest)
 
@@ -168,10 +194,13 @@ Credenciales: `supabase/.env.local` (formato `SUPABASE_URL=...` / `SUPABASE_SERV
 - `patch_06_sku_unico.sql` — ✅ APLICADO (índices únicos parciales sku/código).
 - `patch_07_buscar_productos_rpc.sql` — ✅ APLICADO (RPC `buscar_productos`, `security invoker`).
 - `patch_08` — ✅ APLICADO (sesion_caja + venta_offline_event + RPC aplicar_venta_offline).
+- `patch_08_ordenar_productos_rpc.sql` — ⏳ **PENDIENTE APLICAR EN DEV** (RPC con `p_order_by`).
 - `patch_09_inventario.sql` — ✅ APLICADO (aplicar_ajuste_stock + empresa.logo_url).
 - `patch_10_producto_historial.sql` — ✅ APLICADO (producto_historial + RLS).
 - `patch_11_sku_configurable.sql` — ✅ APLICADO (empresa_configuracion_sku, counters, RPCs).
-  El error histórico "structure does not match" era MITO: era bug frontend `numeric`→`string`, ya resuelto.
+- `patch_12_supabase_warnings.sql` — ✅ APLICADO (search_path fixes).
+- `production_migration.sql` — ✅ APLICADO EN PRODUCCIÓN (schema completo consolidado).
+- `production_seed.sql` — ✅ APLICADO EN PRODUCCIÓN (empresa + módulos).
 
 ### App (frontend)
 - React PWA (Vite) + Supabase. Corre en `http://localhost:5173/catalogo` (dev server: `cd web && npm run dev`).
