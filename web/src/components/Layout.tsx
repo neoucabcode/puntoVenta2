@@ -9,6 +9,7 @@ import { useCajaStore } from '../store/useCajaStore'
 import { abrirCaja, cerrarCaja } from '../lib/caja'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
 import { useModulos } from '../hooks/useModulos'
+import { useIsMobile } from '../hooks/useMediaQuery'
 
 type NavItem = { to: string; label: string; icon: string; modulo?: string; adminOnly?: boolean }
 
@@ -34,6 +35,21 @@ export function Layout({ children }: { children: ReactNode }) {
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
   const { inventarioHabilitado } = useUsuarioRol()
   const { estaHabilitado } = useModulos()
+
+  const isMobile = useIsMobile()
+  const drawerOpen = useUIStore((s) => s.drawerOpen)
+  const toggleDrawer = useUIStore((s) => s.toggleDrawer)
+  const setDrawer = useUIStore((s) => s.setDrawer)
+
+  // Auto-close drawer on navigation
+  useEffect(() => {
+    setDrawer(false)
+  }, [location.pathname, setDrawer])
+
+  // Auto-close drawer when switching to desktop
+  useEffect(() => {
+    if (!isMobile) setDrawer(false)
+  }, [isMobile, setDrawer])
 
   // Filtrar nav: Catálogo siempre visible; otros módulos requieren habilitación
   const items = navItems.filter((i) => {
@@ -86,7 +102,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
-      <aside className="sidebar">
+      <aside className={`sidebar${drawerOpen ? ' drawer-open' : ''}`}>
         <button className="brand-toggle" onClick={toggleSidebar} aria-label="Colapsar menú" title={collapsed ? 'Expandir' : 'Colapsar'}>
           <span className="material-symbols-outlined">{collapsed ? 'chevron_right' : 'chevron_left'}</span>
           <span className="side-label">Colapsar</span>
@@ -113,12 +129,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="main-col">
         <header className="topbar">
-          {location.pathname !== '/' && (
-            <button className="topbar-cmd" onClick={() => setPaletteOpen(true)}>
-              <span className="material-symbols-outlined">search</span>
-              Buscar o navegar… <kbd>Ctrl K</kbd>
+          {isMobile && (
+            <button className="topbar-hamburger" onClick={toggleDrawer} aria-label="Abrir menú">
+              <span className="material-symbols-outlined">menu</span>
             </button>
           )}
+
           {location.pathname === '/catalogo' && (
             <div className="topbar-page-title">
               <span className="material-symbols-outlined">inventory_2</span>
@@ -155,6 +171,9 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {isMobile && drawerOpen && (
+        <div className="drawer-backdrop" onClick={() => setDrawer(false)} />
+      )}
     </div>
   )
 }
