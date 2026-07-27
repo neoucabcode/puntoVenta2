@@ -8,7 +8,6 @@ import {
 import { obtenerCatalogo } from '../lib/cacheCatalogo'
 import { DataTable } from '../components/DataTable'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
-import { SortDropdown } from '../components/SortDropdown'
 
 export function CatalogoPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -17,23 +16,23 @@ export function CatalogoPage() {
   const [soloActivos, setSoloActivos] = useState(true)
   const [usandoCache, setUsandoCache] = useState(false)
   const [vista, setVista] = useState<'grid' | 'lista'>('grid')
-  const [orderBy, setOrderBy] = useState('nombre ASC')
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null)
   const [categoriasError, setCategoriasError] = useState('')
+  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
 
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
 
   // Memoizar filtros: el hook solo resetea offset cuando cambia la referencia
   const filters = useMemo(
-    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos, orderBy }),
-    [search, categoriaFiltro, soloActivos, orderBy]
+    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos }),
+    [search, categoriaFiltro, soloActivos]
   )
 
   // El catálogo es SOLO LECTURA de forma permanente (Slice 1): lista, búsqueda y
   // filtrado. La edición de productos/categorías vive en `/inventario`.
   const { items, loadingMore, loading, error, sentinelRef } = useInfiniteScroll({
-    fetcher: async ({ offset, pageSize, search, categoriaId, soloActivos, orderBy }) => {
+    fetcher: async ({ offset, pageSize, search, categoriaId, soloActivos }) => {
       // W1: usa la caché local cuando está offline o falla Supabase; marca
       // `desdeCache` para mostrar el indicador de catálogo sin conexión.
       const res = await obtenerCatalogo(
@@ -44,7 +43,6 @@ export function CatalogoPage() {
             soloActivos,
             offset,
             pageSize,
-            orderBy,
           }),
         { guardarEnCache: offset === 0 }
       )
@@ -72,6 +70,10 @@ export function CatalogoPage() {
     if (p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo) return 'warn'
     return 'ok'
   }
+
+  function onImgError(id: string) {
+    setImgErrors((prev) => new Set(prev).add(id))
+  }
   const stockLabel: Record<'ok' | 'warn' | 'off', string> = {
     ok: 'En stock',
     warn: 'Stock bajo',
@@ -81,11 +83,6 @@ export function CatalogoPage() {
   return (
     <div className="catalogo">
       <header className="catalogo-toolbar">
-        <div className="catalogo-head">
-          <p className="catalogo-sub">
-            {items.length} {items.length === 1 ? 'producto' : 'productos'}
-          </p>
-        </div>
         <div className="catalogo-filtros">
           <select
             className="filtro-cat"
@@ -98,7 +95,6 @@ export function CatalogoPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          <SortDropdown value={orderBy} onChange={setOrderBy} />
         </div>
         <div className="catalogo-head-actions">
           <input
@@ -151,10 +147,12 @@ export function CatalogoPage() {
                   return (
                     <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
                       <div className="card-img">
-                        {p.imagen_url ? (
-                          <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
+                        {p.imagen_url && !imgErrors.has(p.id) ? (
+                          <img src={p.imagen_url} alt={p.nombre} loading="lazy" onError={() => onImgError(p.id)} />
                         ) : (
-                          <span className="thumb-empty material-symbols-outlined">image</span>
+                          <span className="thumb-empty material-symbols-outlined">
+                            {imgErrors.has(p.id) ? 'broken_image' : 'inventory_2'}
+                          </span>
                         )}
                         <span className={`ribbon ${st}`}>{stockLabel[st]}</span>
                       </div>
@@ -190,10 +188,12 @@ export function CatalogoPage() {
                 {
                   key: 'img', titulo: '', hideHeader: true, className: 'dt-thumb',
                   render: (p: ProductoJoin) =>
-                    p.imagen_url ? (
-                      <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
+                    p.imagen_url && !imgErrors.has(p.id) ? (
+                      <img src={p.imagen_url} alt={p.nombre} loading="lazy" onError={() => onImgError(p.id)} />
                     ) : (
-                      <span className="dt-thumb-empty material-symbols-outlined">image</span>
+                      <span className="dt-thumb-empty material-symbols-outlined">
+                        {imgErrors.has(p.id) ? 'broken_image' : 'inventory_2'}
+                      </span>
                     ),
                 },
                 { key: 'nombre', titulo: 'Nombre', render: (p: ProductoJoin) => p.nombre },

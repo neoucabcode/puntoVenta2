@@ -22,7 +22,6 @@ import { DataTable } from '../components/DataTable'
 import { ConfirmarEliminarModal } from '../components/ConfirmarEliminarModal'
 import { HistorialModal } from '../components/HistorialModal'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
-import { SortDropdown } from '../components/SortDropdown'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
 
 const MOTIVOS_AJUSTE = ['conteo físico', 'merma', 'devolución', 'otro'] as const
@@ -44,7 +43,6 @@ export function InventarioPage() {
   const [search, setSearch] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
   const [vista, setVista] = useState<'grid' | 'lista'>('lista')
-  const [orderBy, setOrderBy] = useState('nombre ASC')
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null)
   const [actionError, setActionError] = useState('')
 
@@ -73,14 +71,14 @@ export function InventarioPage() {
 
   // Memoizar filtros: el hook solo resetea offset cuando cambia la referencia
   const filters = useMemo(
-    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos: false, orderBy }),
-    [search, categoriaFiltro, orderBy]
+    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos: false }),
+    [search, categoriaFiltro]
   )
 
   const { items, loadingMore, loading, error, sentinelRef, reset } = useInfiniteScroll({
-    fetcher: async ({ offset, pageSize, search, categoriaId, soloActivos, orderBy }) => {
+    fetcher: async ({ offset, pageSize, search, categoriaId, soloActivos }) => {
       const res = await listarProductos({
-        search, categoriaId, soloActivos, offset, pageSize, orderBy,
+        search, categoriaId, soloActivos, offset, pageSize,
       })
       return { items: res.items, hasMore: res.hasMore }
     },
@@ -256,7 +254,6 @@ export function InventarioPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          <SortDropdown value={orderBy} onChange={setOrderBy} />
         </div>
         <div className="inv-acciones">
           <input
@@ -323,7 +320,7 @@ export function InventarioPage() {
                       {p.imagen_url ? (
                         <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
                       ) : (
-                        <span className="thumb-empty material-symbols-outlined">image</span>
+                        <span className="thumb-empty material-symbols-outlined">inventory_2</span>
                       )}
                       {esBajoStock(p) && (
                         <span className="ribbon warn" title={`Por debajo del mínimo (${p.stock_minimo})`}>

@@ -9,7 +9,6 @@ import {
   leerTasaSincronizada,
 } from '../lib/tasaSync'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
-import { SortDropdown } from '../components/SortDropdown'
 
 const CLIENTES_KEY = 'pv-clientes-recientes'
 
@@ -25,7 +24,6 @@ export function PosPage() {
   const [busqueda, setBusqueda] = useState('')
   const [busquedaDebounced, setBusquedaDebounced] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
-  const [orderBy, setOrderBy] = useState('nombre ASC')
   const [vista, setVista] = useState<VistaProductos>('lista')
   const [carrito, setCarrito] = useState<CarritoItem[]>([])
   const [tasa, setTasa] = useState(1)
@@ -53,20 +51,18 @@ export function PosPage() {
     () => ({
       search: busquedaDebounced,
       categoriaId: categoriaFiltro || null,
-      orderBy,
     }),
-    [busquedaDebounced, categoriaFiltro, orderBy]
+    [busquedaDebounced, categoriaFiltro]
   )
 
   const { items, loading, loadingMore, error, sentinelRef } = useInfiniteScroll({
-    fetcher: async ({ offset, pageSize, search, categoriaId, orderBy }) => {
+    fetcher: async ({ offset, pageSize, search, categoriaId }) => {
       const res = await listarProductos({
         search,
         categoriaId,
         soloActivos: true,
         offset,
         pageSize,
-        orderBy,
       })
       return { items: res.items, hasMore: res.hasMore }
     },
@@ -297,7 +293,6 @@ export function PosPage() {
                   <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
               </select>
-              <SortDropdown value={orderBy} onChange={setOrderBy} />
               <div className="pos-view-toggle" role="group" aria-label="Vista">
                 <button
                   className={vista === 'lista' ? 'active' : ''}
@@ -365,7 +360,7 @@ export function PosPage() {
                         {p.imagen_url ? (
                           <img src={p.imagen_url} alt={p.nombre} loading="lazy" />
                         ) : (
-                          <span className="thumb-empty material-symbols-outlined">image</span>
+                          <span className="thumb-empty material-symbols-outlined">inventory_2</span>
                         )}
                         <span className={`ribbon ${st}`}>
                           {st === 'off' ? 'Agotado' : st === 'warn' ? 'Stock bajo' : 'Disponible'}
