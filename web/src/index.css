@@ -2044,3 +2044,47 @@ button { font-family: var(--font); }
   .pos-producto-list { min-height: 44px; }
   .card input, .card button { min-height: 44px; }
 }
+
+/* ---------- Safe area insets (PWA standalone) ---------- */
+.app-shell {
+  padding-top: env(safe-area-inset-top, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+.sidebar {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+.topbar {
+  padding-right: calc(var(--sp-4) + env(safe-area-inset-right, 0));
+}
+
+/* ---------- Container queries for product card adaptation ---------- */
+@supports (container-type: inline-size) {
+  .productos-grid-scroll,
+  .pos-productos-grid {
+    container-type: inline-size;
+    container-name: card-grid;
+  }
+
+  @container card-grid (max-width: 400px) {
+    .card-producto .card-img {
+      aspect-ratio: 16 / 9;
+    }
+    .card-producto .card-nombre {
+      font-size: var(--fs-sm);
+      min-height: auto;
+    }
+    .card-producto .card-footer {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  @container card-grid (min-width: 600px) {
+    .card-producto .card-img {
+      aspect-ratio: 4 / 3;
+    }
+  }
+}
