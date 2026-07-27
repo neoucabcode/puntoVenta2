@@ -5,6 +5,9 @@ interface UIState {
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   setSidebar: (v: boolean) => void
+  drawerOpen: boolean
+  toggleDrawer: () => void
+  setDrawer: (v: boolean) => void
   theme: 'dark' | 'light'
   toggleTheme: () => void
   setTheme: (v: 'dark' | 'light') => void
@@ -25,6 +28,9 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebar: (v) => set({ sidebarCollapsed: v }),
+      drawerOpen: false,
+      toggleDrawer: () => set((s) => ({ drawerOpen: !s.drawerOpen })),
+      setDrawer: (v) => set({ drawerOpen: v }),
       theme: 'dark',
       toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
       setTheme: (v) => set({ theme: v }),
