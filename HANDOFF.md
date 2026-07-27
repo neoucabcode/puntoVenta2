@@ -183,7 +183,7 @@ feature-branch → develop (dev) → probar → merge a master → producción
 - ✅ **W2:** Rol admin asignado.
 - ✅ **Imágenes en Storage:** 577 objetos (bucket `productos`, convención `{empresa_id}/{sku}.webp` verificado).
 - ⏳ **17 productos sin imagen** (586 total - 569 con imagen) — el usuario las sube desde Inventario → ProductoForm.
-- ✅ **Usuario dev nuevo:** `neoucab@gmail.com` (UID: `32369ac2-0e68-49a3-84ab-062dd66181b1`) — INSERT ejecutado via MCP execute_sql. Rol admin asignado.
+- ✅ **Usuario dev:** `neoucab@gmail.com` / `admin123` — creado directo en auth.users con bcrypt hash + email confirmado. Vinculado a FerrehogarMart (admin).
 - ⏳ **Testing responsive en dispositivo real** —.drawer mobile, touch targets, dvh, container queries
 
 ## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
