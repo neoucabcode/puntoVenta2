@@ -67,10 +67,15 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - **RLS:** activo, aislamiento por empresa_id
 - **PWA:** sí (service worker + manifest)
 
-### Snapshot de BD (2026-07-26 verificado)
-| Productos | Con imagen | Categorías | Usuarios | Admins | Cajas abiertas | Ventas pendientes |
-|-----------|-----------|------------|----------|--------|----------------|-------------------|
-| 586 | 569 (97.1%) | 8 | 1 | 1 | 0 | 0 |
+### Snapshot de BD (2026-07-27 verificado)
+| Entorno | Productos | Con imagen | Categorías | Usuarios | Admins |
+|---------|-----------|-----------|------------|----------|--------|
+| **Dev** (`pvopcajqersioqlmccwg`) | 586 | 569 (97.1%) | 8 | 1 | 1 |
+| **Prod** (`bczpfyguamysdnihwzvl`) | 472 | ~350 (estimado) | 8 | pendiente | pendiente |
+
+> **Nota producción:** 472 productos únicos migrados (de 586 en dev). La diferencia se debe a SKUs
+> duplicados en los archivos de lotes batch (mismo SKU, diferentes UUIDs). Se limpiaron manteniendo
+> el registro más antiguo por SKU.
 
 > **Objetos en Storage (bucket `productos`):** 577 (vs 569 con imagen — 8 huérfanas o múltiples archivos). Convención: `{empresa_id}/{sku}.webp` — verificado.
 >
@@ -86,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-26, session: multi-environment + módulos)
+## Estado actual (última actualización: 2026-07-27, session: migración productos dev→prod)
 
 ### Arquitectura multi-entorno (2026-07-26)
 
@@ -102,8 +107,11 @@ feature-branch → develop (dev) → probar → merge a master → producción
 
 **Producción — Empresa:** FerrehogarMart (id `b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b`)
 - **Módulos habilitados:** solo `catalogo` (resto deshabilitados hasta aprobación)
+- **Productos:** 472 únicos migrados desde dev (2026-07-27)
+- **Categorías:** 8 migradas desde dev
 - **Usuarios:** pendiente crear 1 admin + 2 vendedores
 - **SQL:** `supabase/production_migration.sql` + `supabase/production_seed.sql` aplicados
+- **Migración productos (2026-07-27):** Lote batch 0-11 ejecutados vía SQL directo. Índice único `idx_producto_empresa_sku_unico` recreado tras limpieza de duplicados.
 
 **Desarrollo — Empresa:** FerrehogarMart (mismo ID, ambos entornos)
 - **Módulos:** todos habilitados (catálogo, venta, inventario, caja)
