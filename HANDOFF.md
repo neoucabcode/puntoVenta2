@@ -139,6 +139,26 @@ feature-branch → develop (dev) → probar → merge a master → producción
 - **Inventario mejoras (2026-07-22):** Editor de imágenes (crop/resize/zoom con react-easy-crop, output 600px webp), paste desde portapapeles (Ctrl+V), display de imágenes corregido (object-fit: contain), validación tipo/tamaño, paths de Storage: `{empresa_id}/{sku}.webp` (verificado en producción), preview SKU sin consumir contador, SkuConfigForm accesible desde InventarioPage, fuzzy check también al editar. **2026-07-23 fixes:** (1) ImageEditor: ref fix para pixelCrop stale state (useRef en vez de useState), (2) ProductoForm: botón de editar imagen existente (re-crop de imágenes guardadas), (3) Storage RLS: mi_empresa_id() con search_path explícito + políticas con foldername(). **2026-07-23 session 2:** (4) Crop mismatch fix: al hacer zoom out para ver imagen completa, el output ahora muestra la imagen entera (no recortada) cuando el crop cubre ≥98% de ambas dimensiones, (5) Paste button CSS fix: variables --surface/--text reemplazadas por --surface-1/--text-primary, (6) ClipboardItem API fix: item.types + getType() en vez de item.items.
 - **Estado BD:** 586 productos, 8 categorías, 569 con imagen (577 objetos en Storage verificado).
 
+### Responsive Modernization (completado 2026-07-27)
+- **Cambio SDD:** `responsive-modernization` — proposal/specs/design/tasks/apply/verify/archive
+- **4 PRs stacked-to-main:** PR1 (viewport dvh + touch targets), PR2 (mobile nav drawer), PR3 (fluid typography + forms + table scroll), PR4 (container queries + safe-area)
+- **Commits:** `80f180e` `111f967` `6c433e4` `9d20e46` `92a3fc3` `a63aa80` `6443077`
+- **Archivos modificados:** `index.css` (+209 líneas), `Layout.tsx` (+29), `ui-store.ts` (+6), `useMediaQuery.ts` (+22 nuevo), `index.html` (viewport meta)
+- **Tests:** 58/58 pass, build OK
+- **Verificación:** PASS WITH WARNINGS (warnings son fidelidad a spec, no funcionales)
+- **Qué se hizo:**
+  - 100vh → 100dvh con fallback (5 elementos)
+  - Touch targets ≥44px en móvil (7 grupos de elementos)
+  - Sidebar drawer mobile (<768px) con hamburger + backdrop
+  - Fluid typography scale con clamp() (--fs-xs a --fs-2xl)
+  - Fluid spacing scale con clamp() (--sp-1 a --sp-6)
+  - Form grid responsive (1 col en móvil)
+  - DataTable horizontal scroll (min-width: 600px)
+  - Container queries para cards de producto
+  - safe-area-inset para PWA standalone
+  - Hook useMediaQuery + useIsMobile/useIsTablet/useIsDesktop
+- **Pendiente:** Testing manual en dispositivos reales + Lighthouse mobile audit
+
 ### Pendiente (Slices 3-6 del rediseño UI)
 - **Slice 3:** Pagos combinados + cliente + cuenta corriente
 - **Slice 4:** Devoluciones
