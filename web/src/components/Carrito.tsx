@@ -1,27 +1,16 @@
 // Carrito.tsx — panel de carrito estilo ticket/table (presentacional).
 //
 // Componente 100% controlado: NO posee estado de carrito, tasa ni metodo de pago.
-// PosPage es quien guarda el carrito (useState) y decide la venta.
+// PosPage es quien guarda el carrito (store) y decide la venta.
 // Solo muestra items + total + tasa. Los botones de accion estan en PosPage.
 
-import type { ProductoJoin } from '../lib/productos'
 import { tasaEstaDesactualizada } from '../lib/tasaSync'
+import type { CarritoItem } from '../types/carrito'
+import { fmtUsd, fmtBs } from '../types/carrito'
 
-export interface CarritoItem {
-  producto: ProductoJoin
-  cantidad: number
-}
-
-export type MetodoPago = 'contado' | 'credito'
-export type MonedaPago = 'BS' | 'USD'
-export type TipoInstrumento = 'efectivo' | 'transferencia' | 'pago_movil' | 'zelle'
-
-export interface InstrumentoPago {
-  id: string
-  tipo: TipoInstrumento
-  moneda: MonedaPago
-  monto: string
-}
+export type { CarritoItem }
+export type { MetodoPago, MonedaPago, TipoInstrumento, InstrumentoPago } from '../types/carrito'
+export { fmtUsd, fmtBs, parseMonto, NOMBRES_TIPO, TIPOS_DISPONIBLES, nuevoInstrumento } from '../types/carrito'
 
 interface CarritoProps {
   items: CarritoItem[]
@@ -33,34 +22,14 @@ interface CarritoProps {
   /** ISO de la ultima sincronizacion real de la tasa; null = sin evidencia. */
   tasaActualizadaEn: string | null
   deshabilitado: boolean
-}
-
-export const fmtUsd = (n: number) => `$${n.toFixed(2)}`
-export const fmtBs = (n: number) => `Bs ${n.toFixed(2)}`
-
-export const parseMonto = (v: string): number => {
-  const n = parseFloat(v)
-  return isNaN(n) ? 0 : n
-}
-
-export const NOMBRES_TIPO: Record<TipoInstrumento, string> = {
-  efectivo: 'Efectivo',
-  transferencia: 'Transferencia',
-  pago_movil: 'Pago Movil',
-  zelle: 'Zelle',
-}
-
-export const TIPOS_DISPONIBLES: TipoInstrumento[] = [
-  'efectivo',
-  'transferencia',
-  'pago_movil',
-  'zelle',
-]
-
-let instCounter = 0
-export function nuevoInstrumento(): InstrumentoPago {
-  instCounter += 1
-  return { id: `inst-${instCounter}`, tipo: 'efectivo', moneda: 'USD', monto: '' }
+  /** ID del item cuyo precio se esta editando inline, o null. */
+  editingPrice?: string | null
+  /** Callback cuando se hace click en el precio para editarlo. */
+  onEditPrice?: (id: string, precio: number) => void
+  /** Callback para actualizar el precio override de un item. */
+  onUpdatePrice?: (id: string, precio: number) => void
+  /** Callback cuando se termina de editar (blur / Escape). */
+  onFinishEditPrice?: () => void
 }
 
 export function Carrito({
@@ -71,11 +40,15 @@ export function Carrito({
   tasa,
   tasaActualizadaEn,
   deshabilitado: _deshabilitado,
+  editingPrice,
+  onEditPrice,
+  onUpdatePrice,
+  onFinishEditPrice,
 }: CarritoProps) {
-  const totalUsd = items.reduce(
-    (acc, it) => acc + Number(it.producto.precio_usd) * it.cantidad,
-    0
-  )
+  const totalUsd = items.reduce((acc, it) => {
+    const precio = it.precio_override ?? Number(it.producto.precio_usd)
+    return acc + (precio - (it.descuento_item || 0)) * it.cantidad
+  }, 0)
   const totalBs = totalUsd * tasa
   const desactualizada = tasaEstaDesactualizada(tasaActualizadaEn)
   const vacio = items.length === 0
@@ -112,8 +85,11 @@ export function Carrito({
               {items.map((it) => {
                 const p = it.producto
                 const agotado = p.stock_actual <= 0
-                const subtotal = Number(p.precio_usd) * it.cantidad
+                const efectivo = it.precio_override ?? Number(p.precio_usd)
+                const descuento = it.descuento_item || 0
+                const subtotal = (efectivo - descuento) * it.cantidad
                 const nombre = p.nombre
+                const tieneDescuento = it.precio_override != null || descuento > 0
                 return (
                   <div className="carrito-ticket-row" key={p.id}>
                     <div className="carrito-ticket-info">
@@ -145,9 +121,79 @@ export function Carrito({
                       >+</button>
                     </div>
 
-                    <div className="carrito-ticket-pu">{fmtUsd(Number(p.precio_usd))}</div>
+                    <div className="carrito-ticket-pu">
+                      {editingPrice === p.id ? (
+                        <input
+                          type="number"
+                          className="carrito-price-edit"
+                          defaultValue={Number(efectivo)}
+                          onBlur={(e) => {
+                            const val = parseFloat(e.target.value)
+                            if (!isNaN(val) && val >= 0 && onUpdatePrice) {
+                              onUpdatePrice(p.id, val)
+                            }
+                            onFinishEditPrice?.()
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              onFinishEditPrice?.()
+                            }
+                            if (e.key === 'Enter') {
+                              const val = parseFloat((e.target as HTMLInputElement).value)
+                              if (!isNaN(val) && val >= 0 && onUpdatePrice) {
+                                onUpdatePrice(p.id, val)
+                              }
+                              onFinishEditPrice?.()
+                            }
+                          }}
+                          autoFocus
+                          min="0"
+                          step="0.01"
+                        />
+                      ) : (
+                        <span
+                          className="carrito-ticket-pu-value"
+                          onClick={() => onEditPrice?.(p.id, Number(efectivo))}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onEditPrice?.(p.id, Number(efectivo))
+                            }
+                          }}
+                        >
+                          {tieneDescuento ? (
+                            <>
+                              <span style={{ textDecoration: 'line-through', opacity: 0.5, fontSize: '0.7rem' }}>
+                                {fmtUsd(Number(p.precio_usd))}
+                              </span>
+                              {' '}
+                              {fmtUsd(efectivo)}
+                            </>
+                          ) : (
+                            fmtUsd(efectivo)
+                          )}
+                          {it.precio_override != null && (
+                            <span className="price-overridden">editado</span>
+                          )}
+                        </span>
+                      )}
+                    </div>
 
-                    <div className="carrito-ticket-sub">{fmtUsd(subtotal)}</div>
+                    <div className="carrito-ticket-sub">
+                      {descuento > 0 ? (
+                        <>
+                          <span style={{ textDecoration: 'line-through', opacity: 0.5, fontSize: '0.7rem' }}>
+                            {fmtUsd(efectivo * it.cantidad)}
+                          </span>
+                          {' '}
+                          {fmtUsd(subtotal)}
+                        </>
+                      ) : (
+                        fmtUsd(subtotal)
+                      )}
+                    </div>
 
                     <button
                       type="button"

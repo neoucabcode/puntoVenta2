@@ -182,3 +182,32 @@ export async function contarPendientes(dispositivo: string): Promise<number> {
   ])
   return pend.length + err.length
 }
+
+// Cuenta eventos en estado 'sync_error' para un dispositivo (W4).
+export async function contarErrores(dispositivo: string): Promise<number> {
+  const errs = await listarSyncError(dispositivo)
+  return errs.length
+}
+
+// Resetea todos los eventos con error a 'pendiente' para reintento manual.
+export async function reintentarErrores(dispositivo: string): Promise<void> {
+  const errs = await listarSyncError(dispositivo)
+  for (const ev of errs) {
+    const db = await abrirDB()
+    await new Promise<void>((resolve, reject) => {
+      const os = store(db, 'readwrite')
+      const req = os.get(ev.id_evento)
+      req.onsuccess = () => {
+        const val = req.result as EventoVentaOffline | undefined
+        if (!val) { resolve(); return }
+        val.estado_sync = 'pendiente'
+        val.intentos = 0
+        val.mensaje_error = undefined
+        const putReq = os.put(val)
+        putReq.onsuccess = () => resolve()
+        putReq.onerror = () => reject(putReq.error)
+      }
+      req.onerror = () => reject(req.error)
+    })
+  }
+}

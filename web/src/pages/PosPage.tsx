@@ -3,7 +3,9 @@ import { listarProductos, listarCategorias, type ProductoJoin, type Categoria } 
 import { obtenerMiEmpresa } from '../lib/empresa'
 import { registrarVentaOffline } from '../lib/ventaOffline'
 import { useCajaStore } from '../store/useCajaStore'
-import { Carrito, fmtUsd, fmtBs, nuevoInstrumento, parseMonto, NOMBRES_TIPO, TIPOS_DISPONIBLES, type CarritoItem, type MetodoPago, type InstrumentoPago, type TipoInstrumento, type MonedaPago } from '../components/Carrito'
+import { useCarritoStore } from '../store/useCarritoStore'
+import { Carrito, fmtUsd, fmtBs, parseMonto, NOMBRES_TIPO, TIPOS_DISPONIBLES } from '../components/Carrito'
+import type { MetodoPago, TipoInstrumento, MonedaPago } from '../types/carrito'
 import {
   marcarTasaSincronizada,
   leerTasaSincronizada,
@@ -20,28 +22,31 @@ export function PosPage() {
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
   const soloLectura = cajaHabilitada && !cajaAbierta
 
+  // ─── Store selectors ────────────────────────────────────────────
+  const items = useCarritoStore((s) => s.items)
+  const metodoPago = useCarritoStore((s) => s.metodoPago)
+  const cliente = useCarritoStore((s) => s.cliente)
+  const cedula = useCarritoStore((s) => s.cedula)
+  const instrumentos = useCarritoStore((s) => s.instrumentos)
+
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [busquedaDebounced, setBusquedaDebounced] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
   const [vista, setVista] = useState<VistaProductos>('lista')
-  const [carrito, setCarrito] = useState<CarritoItem[]>([])
-  const [tasa, setTasa] = useState(1)
   const [tasaActualizadaEn, setTasaActualizadaEn] = useState<string | null>(null)
-  const [metodoPago, setMetodoPago] = useState<MetodoPago>('contado')
-  const [cliente, setCliente] = useState('')
-  const [cedula, setCedula] = useState('')
   const [clientesRecientes, setClientesRecientes] = useState<string[]>([])
   const [msg, setMsg] = useState('')
   const [procesando, setProcesando] = useState(false)
-  const [instrumentos, setInstrumentos] = useState<InstrumentoPago[]>([])
   const [pantalla, setPantalla] = useState<Pantalla>('venta')
   const [ventaExitosa, setVentaExitosa] = useState(false)
+  const [carritoDrawerOpen, setCarritoDrawerOpen] = useState(false)
+  const [editingPrice, setEditingPrice] = useState<string | null>(null)
 
   const busquedaRef = useRef<HTMLInputElement>(null)
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
 
-  // Debounce de búsqueda: 300ms antes de disparar la query al servidor
+  // Debounce de busqueda: 300ms antes de disparar la query al servidor
   useEffect(() => {
     const t = setTimeout(() => setBusquedaDebounced(busqueda), 300)
     return () => clearTimeout(t)
@@ -55,7 +60,7 @@ export function PosPage() {
     [busquedaDebounced, categoriaFiltro]
   )
 
-  const { items, loading, loadingMore, error, sentinelRef } = useInfiniteScroll({
+  const { items: productos, loading, loadingMore, error, sentinelRef } = useInfiniteScroll({
     fetcher: async ({ offset, pageSize, search, categoriaId }) => {
       const res = await listarProductos({
         search,
@@ -70,11 +75,18 @@ export function PosPage() {
     root: gridScrollRef.current,
   })
 
-  const totalUsd = useMemo(
-    () => carrito.reduce((acc, it) => acc + Number(it.producto.precio_usd) * it.cantidad, 0),
-    [carrito]
+  const igtfHabilitado = useCarritoStore((s) => s.igtfHabilitado)
+  const cantidadItems = useCarritoStore((s) => s.items.reduce((acc, i) => acc + i.cantidad, 0))
+
+  // Totales from store
+  const totales = useMemo(() => useCarritoStore.getState().getTotales(), [items, instrumentos, metodoPago])
+
+  const sumaBs = useMemo(
+    () => instrumentos
+      .filter((i) => i.moneda === 'BS')
+      .reduce((acc, i) => acc + parseMonto(i.monto), 0),
+    [instrumentos]
   )
-  const totalBs = totalUsd * tasa
 
   useEffect(() => {
     listarCategorias()
@@ -84,7 +96,10 @@ export function PosPage() {
     obtenerMiEmpresa()
       .then((emp) => {
         if (!emp) return
-        setTasa(emp.tasa_activa ?? 1)
+        useCarritoStore.getState().setTasaBCV(emp.tasa_activa ?? 36.50)
+        if (emp.igtf_habilitado != null) {
+          useCarritoStore.setState({ igtfHabilitado: emp.igtf_habilitado })
+        }
         const enLinea =
           typeof navigator === 'undefined' ? true : navigator.onLine
         if (enLinea) {
@@ -112,6 +127,10 @@ export function PosPage() {
         busquedaRef.current?.focus()
       }
       if (e.key === 'Escape') {
+        if (carritoDrawerOpen) {
+          setCarritoDrawerOpen(false)
+          return
+        }
         if (pantalla === 'pago') {
           setPantalla('venta')
           return
@@ -125,64 +144,44 @@ export function PosPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pantalla])
+  }, [pantalla, carritoDrawerOpen])
 
   // Sugerencias: primeros 8 de la lista ya cargada (para vista lista)
-  const sugerencias = useMemo(() => items.slice(0, 8), [items])
+  const sugerencias = useMemo(() => productos.slice(0, 8), [productos])
 
   function agregarAlCarrito(p: ProductoJoin) {
-    setCarrito((prev) => {
-      const found = prev.find((i) => i.producto.id === p.id)
-      if (found) {
-        return prev.map((i) =>
-          i.producto.id === p.id ? { ...i, cantidad: i.cantidad + 1 } : i
-        )
-      }
-      return [...prev, { producto: p, cantidad: 1 }]
-    })
+    useCarritoStore.getState().agregarProducto(p)
     setMsg('')
   }
 
-  const increment = (id: string) =>
-    setCarrito((prev) =>
-      prev.map((i) =>
-        i.producto.id === id ? { ...i, cantidad: i.cantidad + 1 } : i
-      )
-    )
-  const decrement = (id: string) =>
-    setCarrito((prev) =>
-      prev.map((i) =>
-        i.producto.id === id
-          ? { ...i, cantidad: Math.max(1, i.cantidad - 1) }
-          : i
-      )
-    )
-  const remove = (id: string) =>
-    setCarrito((prev) => prev.filter((i) => i.producto.id !== id))
-
   function resetearTodo() {
-    setCarrito([])
-    setCliente('')
-    setCedula('')
-    setInstrumentos([])
-    setMetodoPago('contado')
+    useCarritoStore.getState().limpiarCarrito()
     setPantalla('venta')
     setVentaExitosa(false)
     setMsg('')
+    setCarritoDrawerOpen(false)
+    setEditingPrice(null)
   }
 
   function handleMetodoPago(m: MetodoPago) {
-    setMetodoPago(m)
-    if (m === 'contado') {
-      setInstrumentos((prev) => prev.length === 0 ? [nuevoInstrumento()] : prev)
-    }
+    useCarritoStore.getState().setMetodoPago(m)
   }
 
   async function handleConfirmarVenta() {
-    if (carrito.length === 0 || soloLectura) return
+    if (items.length === 0 || soloLectura) return
 
     if (metodoPago === 'credito' && !cedula.trim()) {
       setMsg('Para ventas a credito, ingresa al menos la cedula del cliente.')
+      return
+    }
+
+    if (metodoPago === 'contado' && instrumentos.length === 0) {
+      setMsg('Agrega al menos un instrumento de pago.')
+      return
+    }
+
+    if (metodoPago === 'contado' && !pagoValido) {
+      setMsg('El pago no cubre el total de la venta.')
       return
     }
 
@@ -191,6 +190,7 @@ export function PosPage() {
     try {
       const pagos = instrumentos.map((inst) => {
         const monto = parseFloat(inst.monto) || 0
+        const tasa = useCarritoStore.getState().getTasa()
         const montoUsd = inst.moneda === 'USD' ? monto : monto / tasa
         return {
           metodo: inst.tipo,
@@ -201,9 +201,16 @@ export function PosPage() {
         }
       })
 
-      for (const it of carrito) {
-        await registrarVentaOffline(it.producto, it.cantidad, pagos)
-      }
+        await registrarVentaOffline(
+          items,
+          pagos,
+          cliente,
+          cedula,
+          metodoPago,
+          totales.totalUSD,
+          totales.totalVES,
+          totales.tasa
+        )
       if (cliente.trim()) {
         setClientesRecientes((prev) => {
           const next = Array.from(new Set([cliente.trim(), ...prev])).slice(0, 10)
@@ -214,48 +221,17 @@ export function PosPage() {
         })
       }
       setVentaExitosa(true)
-      setTimeout(() => resetearTodo(), 2000)
+      setCarritoDrawerOpen(false)
+      setTimeout(() => resetearTodo(), 3000)
     } catch (err) {
-      setMsg(`Error al registrar la venta: ${(err as Error).message}`)
+      setMsg(`Error al registrar: ${(err as Error).message}`)
     } finally {
       setProcesando(false)
     }
   }
 
-  // ─── Desglose impuestos ─────────────────────────────────────────
-  const subtotal = totalUsd
-  const iva = subtotal * 0.16
-  const sumaBs = instrumentos
-    .filter((i) => i.moneda === 'BS')
-    .reduce((acc, i) => acc + parseMonto(i.monto), 0)
-  const igtfUsd = (sumaBs / tasa) * 0.03
-  const totalConImpuestos = subtotal + iva + igtfUsd
-
-  // Instrumentos: validacion de pago
-  const totalAsignadoUsd = instrumentos.reduce((acc, inst) => {
-    const monto = parseMonto(inst.monto)
-    return acc + (inst.moneda === 'USD' ? monto : monto / tasa)
-  }, 0)
-  const pagoCompleto = totalAsignadoUsd >= totalUsd
-  const faltante = Math.max(0, totalUsd - totalAsignadoUsd)
-  const excedente = Math.max(0, totalAsignadoUsd - totalUsd)
-  const contadoValido = instrumentos.length > 0 && pagoCompleto
+  const contadoValido = instrumentos.length > 0 && totales.pagoCompleto
   const pagoValido = metodoPago === 'credito' || contadoValido
-
-  function actualizarInst(id: string, cambio: Partial<InstrumentoPago>) {
-    setInstrumentos((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, ...cambio } : i))
-    )
-  }
-
-  const MAX_INSTRUMENTOS = 5
-  function agregarInstrumento() {
-    if (instrumentos.length >= MAX_INSTRUMENTOS) return
-    setInstrumentos((prev) => [...prev, nuevoInstrumento()])
-  }
-  function quitarInstrumento(id: string) {
-    setInstrumentos((prev) => prev.filter((i) => i.id !== id))
-  }
 
   // ─── Pantalla 1: Venta (catalogo + carrito) ─────────────────────
   if (pantalla === 'venta') {
@@ -345,7 +321,7 @@ export function PosPage() {
               </div>
             ) : (
               <div className="pos-productos-grid" ref={gridScrollRef}>
-                {items.map((p) => {
+                {productos.map((p) => {
                   const st = p.stock_actual <= 0 ? 'off' : p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo ? 'warn' : 'ok'
                   return (
                     <button
@@ -382,7 +358,7 @@ export function PosPage() {
                     </button>
                   )
                 })}
-                {items.length === 0 && (
+                {productos.length === 0 && (
                   <p className="pos-vacio">Sin productos que coincidan.</p>
                 )}
                 <div ref={sentinelRef} className="sentinela" />
@@ -392,36 +368,87 @@ export function PosPage() {
             {loadingMore && <p className="loading-more">Cargando más…</p>}
           </section>
 
-          <div className="pos-wizard-panel">
+          {carritoDrawerOpen && <div className="pos-cart-backdrop" onClick={() => setCarritoDrawerOpen(false)} />}
+
+          <div className={`pos-wizard-panel${carritoDrawerOpen ? ' drawer-open' : ''}`}>
             <div className="pos-wizard-content">
+              <div className="carrito-header">
+                <button
+                  type="button"
+                  className="pos-cart-close carrito-close-mobile"
+                  onClick={() => setCarritoDrawerOpen(false)}
+                  aria-label="Cerrar carrito"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+                <h3>Carrito</h3>
+                {items.length > 0 && (
+                  <button
+                    type="button"
+                    className="carrito-clear"
+                    onClick={() => {
+                      useCarritoStore.getState().limpiarCarrito()
+                      setEditingPrice(null)
+                    }}
+                    title="Vaciar carrito"
+                  >
+                    <span className="material-symbols-outlined">delete_sweep</span>
+                  </button>
+                )}
+              </div>
               <Carrito
-                items={carrito}
-                onIncrement={increment}
-                onDecrement={decrement}
-                onRemove={remove}
-                tasa={tasa}
+                items={items}
+                onIncrement={(id) => useCarritoStore.getState().incrementarCantidad(id)}
+                onDecrement={(id) => useCarritoStore.getState().decrementarCantidad(id)}
+                onRemove={(id) => useCarritoStore.getState().eliminarItem(id)}
+                tasa={totales.tasa}
                 tasaActualizadaEn={tasaActualizadaEn}
                 deshabilitado={soloLectura}
+                editingPrice={editingPrice}
+                onEditPrice={(id) => {
+                  setEditingPrice(id)
+                }}
+                onUpdatePrice={(id, precio) => {
+                  useCarritoStore.getState().actualizarPrecioItem(id, precio)
+                }}
+                onFinishEditPrice={() => setEditingPrice(null)}
               />
-              {carrito.length > 0 && (
+              {items.length > 0 && (
                 <div className="carrito-ticket-acciones" style={{ marginTop: '0.5rem' }}>
                   <button
                     type="button"
                     className="primary"
                     disabled={soloLectura}
                     onClick={() => {
-                      setInstrumentos((prev) => prev.length === 0 ? [nuevoInstrumento()] : prev)
+                      useCarritoStore.getState().setMetodoPago('contado')
                       setPantalla('pago')
+                      setCarritoDrawerOpen(false)
+                      setEditingPrice(null)
                     }}
                   >
                     <span className="material-symbols-outlined" aria-hidden="true">payments</span>
-                    Cobrar — {fmtUsd(totalUsd)}
+                    Cobrar — {fmtUsd(totales.subtotalUSD)}
                   </button>
                 </div>
               )}
             </div>
           </div>
         </div>
+
+        {items.length > 0 && (
+          <div className="pos-cart-toggle" onClick={() => setCarritoDrawerOpen(true)}>
+            <span className="material-symbols-outlined">shopping_cart</span>
+            <span className="pos-cart-toggle-btn">
+              Ver carrito
+            </span>
+            <span className="pos-cart-toggle-info">
+              {cantidadItems}
+            </span>
+            <span className="pos-cart-toggle-info">
+              {fmtUsd(totales.totalUSD)}
+            </span>
+          </div>
+        )}
 
         {msg && (
           <p
@@ -448,10 +475,19 @@ export function PosPage() {
                 check_circle
               </span>
               <h2 className="pos-pago-exito-titulo">Venta registrada</h2>
-              <p className="pos-pago-exito-total">{fmtUsd(totalUsd)}</p>
-              <button type="button" className="primary" onClick={resetearTodo}>
-                Nueva venta
-              </button>
+              <p className="pos-pago-exito-total">{fmtUsd(totales.subtotalUSD)}</p>
+              <p className="pos-pago-exito-total" style={{ fontSize: 'var(--fs-lg)', color: 'var(--text-secondary)', margin: 0 }}>
+                {fmtBs(totales.subtotalVES)}
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button type="button" className="primary" onClick={resetearTodo}>
+                  Nueva venta
+                </button>
+                <button type="button" className="wf-btn wf-btn-atras" disabled>
+                  <span className="material-symbols-outlined" aria-hidden="true">print</span>
+                  Imprimir
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -477,9 +513,9 @@ export function PosPage() {
                   <span>P.Unit</span>
                   <span>Subtotal</span>
                 </div>
-                {carrito.map((it) => {
+                {items.map((it) => {
                   const p = it.producto
-                  const precio = Number(p.precio_usd)
+                  const precio = it.precio_override ?? Number(p.precio_usd)
                   return (
                     <div className="wf-resumen-items-row" key={p.id}>
                       <span className="wf-resumen-item-nombre">{p.nombre}</span>
@@ -495,8 +531,8 @@ export function PosPage() {
 
               {/* Total general */}
               <div className="wf-resumen-total">
-                <strong className="wf-resumen-total-usd">{fmtUsd(totalUsd)}</strong>
-                <span className="wf-resumen-total-bs">{fmtBs(totalBs)}</span>
+                <strong className="wf-resumen-total-usd">{fmtUsd(totales.subtotalUSD)}</strong>
+                <span className="wf-resumen-total-bs">{fmtBs(totales.subtotalVES)}</span>
               </div>
 
               {/* Datos del cliente (opcional) */}
@@ -510,7 +546,7 @@ export function PosPage() {
                     list="pago-clientes-list"
                     placeholder="Nombre del cliente"
                     value={cliente}
-                    onChange={(e) => setCliente(e.target.value)}
+                    onChange={(e) => useCarritoStore.getState().setCliente(e.target.value)}
                     autoComplete="off"
                   />
                   <datalist id="pago-clientes-list">
@@ -526,7 +562,7 @@ export function PosPage() {
                     type="text"
                     placeholder="V-12345678"
                     value={cedula}
-                    onChange={(e) => setCedula(e.target.value)}
+                    onChange={(e) => useCarritoStore.getState().setCedula(e.target.value)}
                     autoComplete="off"
                   />
                 </div>
@@ -567,6 +603,7 @@ export function PosPage() {
                   <span className="wf-pago-label">Instrumentos de pago</span>
                   {instrumentos.map((inst, idx) => {
                     const montoNum = parseMonto(inst.monto)
+                    const tasa = totales.tasa
                     const montoUsd = inst.moneda === 'USD' ? montoNum : montoNum / tasa
                     return (
                       <div className="wf-pago-instrumento" key={inst.id}>
@@ -577,7 +614,7 @@ export function PosPage() {
                               type="button"
                               className="wf-pago-instrumento-remove"
                               aria-label="Quitar este pago"
-                              onClick={() => quitarInstrumento(inst.id)}
+                              onClick={() => useCarritoStore.getState().quitarInstrumento(inst.id)}
                             >
                               <span className="material-symbols-outlined" aria-hidden="true">close</span>
                             </button>
@@ -588,7 +625,7 @@ export function PosPage() {
                             className="wf-pago-instrumento-select"
                             value={inst.tipo}
                             onChange={(e) =>
-                              actualizarInst(inst.id, { tipo: e.target.value as TipoInstrumento })
+                              useCarritoStore.getState().actualizarInstrumento(inst.id, { tipo: e.target.value as TipoInstrumento })
                             }
                             aria-label="Tipo de pago"
                           >
@@ -600,7 +637,7 @@ export function PosPage() {
                             className="wf-pago-instrumento-moneda"
                             value={inst.moneda}
                             onChange={(e) =>
-                              actualizarInst(inst.id, { moneda: e.target.value as MonedaPago })
+                              useCarritoStore.getState().actualizarInstrumento(inst.id, { moneda: e.target.value as MonedaPago })
                             }
                             aria-label="Moneda"
                           >
@@ -615,7 +652,7 @@ export function PosPage() {
                             placeholder="0.00"
                             value={inst.monto}
                             onChange={(e) =>
-                              actualizarInst(inst.id, { monto: e.target.value })
+                              useCarritoStore.getState().actualizarInstrumento(inst.id, { monto: e.target.value })
                             }
                             autoFocus={idx === 0}
                             aria-label={`Monto del pago ${idx + 1}`}
@@ -625,14 +662,14 @@ export function PosPage() {
                           <span className="wf-pago-instrumento-usd">≈ {fmtUsd(montoUsd)}</span>
                         )}
                         {montoNum > 0 && inst.moneda === 'USD' && (
-                          <span className="wf-pago-instrumento-bs">≈ {fmtBs(montoNum * tasa)}</span>
+                          <span className="wf-pago-instrumento-bs">≈ {fmtBs(montoNum * totales.tasa)}</span>
                         )}
                       </div>
                     )
                   })}
 
-                  {instrumentos.length < MAX_INSTRUMENTOS && (
-                    <button type="button" className="wf-pago-agregar" onClick={agregarInstrumento}>
+                  {instrumentos.length < 5 && (
+                    <button type="button" className="wf-pago-agregar" onClick={() => useCarritoStore.getState().agregarInstrumento()}>
                       <span className="material-symbols-outlined" aria-hidden="true">add</span>
                       Agregar pago
                     </button>
@@ -642,26 +679,26 @@ export function PosPage() {
                   <div className="pago-resumen">
                     <div className="pago-resumen-linea">
                       <span>Total</span>
-                      <strong>{fmtUsd(totalUsd)}</strong>
+                      <strong>{fmtUsd(totales.totalUSD)}</strong>
                     </div>
                     <div className="pago-resumen-linea pago-resumen-asignado">
                       <span>Recibido</span>
-                      <strong>{fmtUsd(totalAsignadoUsd)}</strong>
+                      <strong>{fmtUsd(totales.totalAsignadoUSD)}</strong>
                     </div>
-                    {faltante > 0 && (
+                    {totales.faltante > 0 && (
                       <div className="pago-resumen-linea pago-resumen-faltante">
                         <span>Faltante</span>
-                        <strong>{fmtUsd(faltante)}</strong>
+                        <strong>{fmtUsd(totales.faltante)}</strong>
                       </div>
                     )}
-                    {excedente > 0 && (
+                    {totales.excedente > 0 && (
                       <div className="pago-resumen-linea pago-resumen-excedente">
                         <span>Vuelto</span>
-                        <strong className="vuelto-valor">{fmtUsd(excedente)}</strong>
-                        <span className="vuelto-bs">{fmtBs(excedente * tasa)}</span>
+                        <strong className="vuelto-valor">{fmtUsd(totales.excedente)}</strong>
+                        <span className="vuelto-bs">{fmtBs(totales.excedente * totales.tasa)}</span>
                       </div>
                     )}
-                    {pagoCompleto && faltante === 0 && (
+                    {totales.pagoCompleto && totales.faltante === 0 && (
                       <div className="pago-resumen-linea pago-resumen-completo">
                         <span>Pago exacto</span>
                         <span className="material-symbols-outlined" aria-hidden="true">check_circle</span>
@@ -677,27 +714,35 @@ export function PosPage() {
                 <div className="wf-pago-impuestos-grid">
                   <div className="wf-pago-impuesto-fila">
                     <span>Subtotal</span>
-                    <span>{fmtUsd(subtotal)}</span>
+                    <span>{fmtUsd(totales.subtotalUSD)}</span>
                   </div>
                   <div className="wf-pago-impuesto-fila">
                     <span>IVA (16%)</span>
-                    <span>{fmtUsd(iva)}</span>
+                    <span>{fmtUsd(totales.ivaUSD)}</span>
                   </div>
-                  <div className="wf-pago-impuesto-fila">
-                    <span>IGTF (3% sobre pagos en BS)</span>
-                    <span>{fmtUsd(igtfUsd)}</span>
-                  </div>
+                  {totales.igtfUSD > 0 && (
+                    <div className="wf-pago-impuesto-fila">
+                      <span>IGTF (3% sobre pago en BS)</span>
+                      <span>{fmtUsd(totales.igtfUSD)}</span>
+                    </div>
+                  )}
                   <div className="wf-pago-impuesto-fila wf-pago-impuesto-total">
                     <span>Total con impuestos</span>
-                    <span>{fmtUsd(totalConImpuestos)}</span>
+                    <span>{fmtUsd(totales.totalUSD)}</span>
                   </div>
                 </div>
+                {igtfHabilitado && metodoPago === 'contado' && sumaBs === 0 && (
+                  <div className="wf-pago-igtf-hint">
+                    <span className="material-symbols-outlined">info</span>
+                    IGTF 3% se aplica solo si pagas en BS
+                  </div>
+                )}
               </div>
 
               {msg && (
                 <p
                   className="pos-pago-msg"
-                  style={{ color: msg.startsWith('Error') || msg.startsWith('Para') ? '#dc2626' : '#16a34a' }}
+                  style={{ color: msg.startsWith('Error') || msg.startsWith('Para') || msg.startsWith('El pago') || msg.startsWith('Agrega') ? '#dc2626' : '#16a34a' }}
                 >
                   {msg}
                 </p>
@@ -711,7 +756,14 @@ export function PosPage() {
                   onClick={handleConfirmarVenta}
                   disabled={soloLectura || procesando || !pagoValido}
                 >
-                  {procesando ? 'Procesando...' : 'Confirmar venta'}
+                  {procesando ? (
+                    <>
+                      <span className="material-symbols-outlined spinning" aria-hidden="true">progress_activity</span>
+                      Registrando venta...
+                    </>
+                  ) : (
+                    'Confirmar venta'
+                  )}
                 </button>
               </div>
             </>

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { PosPage } from './PosPage'
 import { listarPendientes, type EventoVentaOffline } from '../lib/colaOffline'
 import { useCajaStore } from '../store/useCajaStore'
+import { useCarritoStore } from '../store/useCarritoStore'
 
 // Mock de empresa: dejamos el resto igual y sobreescribimos las funciones que
 // usa PosPage + ventaOffline (patron heredado de ventaOffline.test.ts).
@@ -58,6 +59,16 @@ describe('PosPage — Slice 2 regresion offline (2-pantalla)', () => {
   beforeEach(async () => {
     await limpiarDB()
     localStorage.setItem('pv-device-id', DEVICE)
+    localStorage.removeItem('pv-carrito')
+    useCarritoStore.setState({
+      items: [],
+      tasaBCV: refs.tasa,
+      tasaPersonalizada: null,
+      metodoPago: 'contado',
+      instrumentos: [{ id: 'inst-init', tipo: 'efectivo', moneda: 'USD', monto: '' }],
+      cliente: '',
+      cedula: '',
+    })
     // Caja "abierta" => venta habilitada (modo offline-safe).
     useCajaStore.getState().setCajaHabilitada(true)
     useCajaStore.getState().setCajaAbierta(true)
@@ -66,8 +77,9 @@ describe('PosPage — Slice 2 regresion offline (2-pantalla)', () => {
   it('venta offline produce evento identico en ventas_pendientes', async () => {
     render(<PosPage />)
 
-    // Pantalla 1: agregar producto al carrito
-    const btn = await screen.findByRole('button', { name: /Taladro/ })
+    // Pantalla 1: agregar producto al carrito (scope to product section)
+    const prodSection = screen.getByLabelText('Productos')
+    const btn = await within(prodSection).findByRole('button', { name: /Taladro 12V/ })
     fireEvent.click(btn)
 
     // Click en "Cobrar" para ir a pantalla 2
@@ -91,13 +103,15 @@ describe('PosPage — Slice 2 regresion offline (2-pantalla)', () => {
     })
     const pend = (await listarPendientes(DEVICE)) as EventoVentaOffline[]
     const payload = pend[0].payload as {
+      version: number
       usuario_id: string
-      total_usd: string
-      detalles: Array<{ producto_id: string; cantidad: string }>
+      total_usd: number
+      items: Array<{ producto_id: string; cantidad: number }>
       pagos: Array<{ metodo: string; moneda: string }>
     }
+    expect(payload.version).toBe(2)
     expect(payload.usuario_id).toBe('user-1')
-    expect(payload.detalles[0].producto_id).toBe('prod-1')
+    expect(payload.items[0].producto_id).toBe('prod-1')
     expect(payload.pagos[0].metodo).toBe('efectivo')
     expect(payload.pagos[0].moneda).toBe('USD')
   })
@@ -126,7 +140,8 @@ describe('PosPage — Slice 2 regresion offline (2-pantalla)', () => {
     render(<PosPage />)
 
     // Agregar producto
-    const btn = await screen.findByRole('button', { name: /Taladro/ })
+    const prodSection = screen.getByLabelText('Productos')
+    const btn = await within(prodSection).findByRole('button', { name: /Taladro 12V/ })
     fireEvent.click(btn)
 
     // Ir a pantalla de pago
@@ -147,7 +162,8 @@ describe('PosPage — Slice 2 regresion offline (2-pantalla)', () => {
   it('Volver desde pantalla pago regresa a pantalla venta', async () => {
     render(<PosPage />)
 
-    const btn = await screen.findByRole('button', { name: /Taladro/ })
+    const prodSection = screen.getByLabelText('Productos')
+    const btn = await within(prodSection).findByRole('button', { name: /Taladro 12V/ })
     fireEvent.click(btn)
 
     const cobrar = screen.getByRole('button', { name: /Cobrar/ })
