@@ -91,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-27, session: migración productos dev→prod)
+## Estado actual (última actualización: 2026-07-27, session: responsive modernization + usuario dev)
 
 ### Arquitectura multi-entorno (2026-07-26)
 
@@ -131,6 +131,7 @@ feature-branch → develop (dev) → probar → merge a master → producción
 - **Variables de entorno:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 - **RLS:** activo, aislamiento por `empresa_id`
 - **PWA:** sí (service worker + manifest)
+- **Dev server:** `host: true` en vite.config.ts (permite testing desde móvil en red local)
 
 ### Módulos completados y mergados
 - **Slices 1-2 del rediseño UI:** DONE. Nav 3 secciones (Venta/Catálogo/Inventario), Catálogo solo lectura, Inventario CRUD admin-gated con ajuste stock + valuación + alerta, Caja UX estilo Fina (flujo 2 pantallas). Offline intacto.
@@ -182,6 +183,8 @@ feature-branch → develop (dev) → probar → merge a master → producción
 - ✅ **W2:** Rol admin asignado.
 - ✅ **Imágenes en Storage:** 577 objetos (bucket `productos`, convención `{empresa_id}/{sku}.webp` verificado).
 - ⏳ **17 productos sin imagen** (586 total - 569 con imagen) — el usuario las sube desde Inventario → ProductoForm.
+- ⏳ **Usuario dev nuevo:** `neoucab@gmail.com` (UID: `32369ac2-0e68-49a3-84ab-062dd66181b1`) — NECESITA INSERT en tabla `usuario` con `rol='admin'` y `empresa_id='b72bb1ff-9b7d-4e69-bb79-edd6f64c8b9b'`. SQL preparado, falta ejecutar en Supabase Dashboard.
+- ⏳ **Testing responsive en dispositivo real** —.drawer mobile, touch targets, dvh, container queries
 
 ## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
 
