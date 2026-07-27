@@ -91,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-27, session: responsive modernization + usuario dev)
+## Estado actual (última actualización: 2026-07-27, session: auth debugging + mobile testing)
 
 ### Arquitectura multi-entorno (2026-07-26)
 
@@ -183,7 +183,9 @@ feature-branch → develop (dev) → probar → merge a master → producción
 - ✅ **W2:** Rol admin asignado.
 - ✅ **Imágenes en Storage:** 577 objetos (bucket `productos`, convención `{empresa_id}/{sku}.webp` verificado).
 - ⏳ **17 productos sin imagen** (586 total - 569 con imagen) — el usuario las sube desde Inventario → ProductoForm.
-- ✅ **Usuario dev:** `neoucab@gmail.com` / `admin123` — creado directo en auth.users con bcrypt hash + email confirmado. Vinculado a FerrehogarMart (admin).
+- ✅ **Usuario dev:** `neoucab@gmail.com` / `admin123` — creado directo en auth.users con bcrypt hash + email confirmado. Vinculado a FerrehogarMart (admin). **Lección:** NUNCA usar /registro para users dev cuando email confirmation está ON; insertar directo en auth.users con pgcrypto + todos los string columns en '' (no NULL).
+- ✅ **buscar_productos overload eliminado:** versión vieja de 6 params eliminada, solo queda la de 7 params (con p_order_by). **Lección:** si da error "could not choose the best candidate function", hay sobrecargas duplicadas.
+- ✅ **Dev DB sin productos:** hay categorías pero 0 productos. Catálogo vacío es normal en dev.
 - ⏳ **Testing responsive en dispositivo real** —.drawer mobile, touch targets, dvh, container queries
 
 ## Estado anterior (2026-07-20, sesión de reestructura de catálogo + Modo Caja Offline V1)
