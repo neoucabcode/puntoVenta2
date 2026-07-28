@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, useRef, useMemo, type FormEvent } from 'react'
+import { useState, useEffect, useRef, useMemo, type FormEvent } from 'react'
 import {
   crearProducto,
   actualizarProducto,
   subirImagenProducto,
   verificarCodigoDuplicado,
   registrarHistorial,
-  renombrarImagen,
   eliminarImagenProducto,
   type Categoria,
   type Producto,
@@ -20,6 +19,7 @@ import { SkuPreview } from './SkuPreview'
 import { DuplicadoAlert } from './DuplicadoAlert'
 import { ImageEditor } from './ImageEditor'
 import { ImageEditorBoundary } from './ImageEditorBoundary'
+import { SkuConfirmDialog } from './SkuConfirmDialog'
 import { validarImagen } from '../lib/imageUtils'
 
 type Props = {
@@ -63,6 +63,8 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [showDuplicado, setShowDuplicado] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [confirmRegenerar, setConfirmRegenerar] = useState(false)
+  const [showSkuEditConfirm, setShowSkuEditConfirm] = useState(false)
+  const [skuEditable, setSkuEditable] = useState(false)
 
   // When config loads, sync admin toggle default
   useEffect(() => {
@@ -134,12 +136,11 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     }
   }, [filePreviewUrl])
 
-  // On edit: if product already has SKU and auto-gen is active, keep it read-only
-  // (admin can uncheck to override)
-  const skuReadOnly =
-    esEdicion && producto?.sku
-      ? autoGenEnabled && !esAdmin
-      : autogenerarActivo && !esAdmin
+  // SKU es inmutable por defecto para productos existentes.
+  // Solo se habilita cuando el admin hace click en "Editar SKU".
+  const skuReadOnly = esEdicion
+    ? !skuEditable
+    : autogenerarActivo && !esAdmin
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0]
@@ -190,12 +191,12 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   }
 
   async function handleRemoveExisting() {
-    // Eliminar archivo de Storage si el producto ya tiene SKU
-    if (producto?.sku) {
+    // Eliminar archivo de Storage si el producto ya tiene imagen
+    if (producto?.imagen_url) {
       try {
         const empresaId = await obtenerMiEmpresaId()
         if (empresaId) {
-          await eliminarImagenProducto(empresaId, producto.sku)
+          await eliminarImagenProducto(empresaId, producto.id)
         }
       } catch (err) {
         console.error('[ProductoForm] Error al eliminar imagen de Storage:', err)
@@ -231,7 +232,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     setShowEditor(true)
   }
 
-  const handleAutoGenToggle = useCallback(() => {
+  function handleAutoGenToggle() {
     setAutoGenEnabled((prev) => {
       const next = !prev
       if (!next) {
@@ -239,7 +240,12 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       }
       return next
     })
-  }, [])
+  }
+
+  function handleSkuEditConfirm() {
+    setShowSkuEditConfirm(false)
+    setSkuEditable(true)
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -308,7 +314,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             setSaving(false)
             return
           }
-          const url = await subirImagenProducto(file, empresaId, guardado.sku)
+          const url = await subirImagenProducto(file, empresaId, guardado.id)
           console.log('[ProductoForm] imagen subida, url:', url)
           guardado = await actualizarProducto(guardado.id, { ...base, imagen_url: url })
           // FIX: Sincronizar el estado local con la URL realmente guardada.
@@ -396,24 +402,18 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     const empresaId = await obtenerMiEmpresaId()
     if (!empresaId) return
 
-    setRegenerating(true)
-    setError('')
-    try {
-      const newSku = await generarSku(empresaId, producto.categoria_id || undefined)
-      if (!newSku) {
-        setError('No se pudo generar un nuevo SKU')
-        setRegenerating(false)
-        return
-      }
+      setRegenerating(true)
+      setError('')
+      try {
+        const newSku = await generarSku(empresaId, producto.categoria_id || undefined)
+        if (!newSku) {
+          setError('No se pudo generar un nuevo SKU')
+          setRegenerating(false)
+          return
+        }
 
-      // Renombrar imagen si existe
-      if (producto.imagen_url && producto.sku) {
-        const ext = producto.imagen_url.split('.').pop()?.split('?')[0] || 'webp'
-        await renombrarImagen(empresaId, producto.sku, newSku, ext)
-      }
-
-      // Actualizar producto con el nuevo SKU
-      const guardado = await actualizarProducto(producto.id, {
+        // Actualizar producto con el nuevo SKU (imagen no se renombra — path es UUID-based)
+        const guardado = await actualizarProducto(producto.id, {
         nombre: producto.nombre,
         sku: newSku,
       })
@@ -448,9 +448,11 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
             </label>
             <label>
-              {autogenerarActivo && !esAdmin
-                ? 'SKU (generado automáticamente)'
-                : 'SKU'}
+              {esEdicion && !skuEditable
+                ? 'SKU (inmutable)'
+                : autogenerarActivo && !esAdmin
+                  ? 'SKU (generado automáticamente)'
+                  : 'SKU'}
               <input
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
@@ -458,6 +460,16 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                 readOnly={skuReadOnly}
               />
             </label>
+            {esEdicion && esAdmin && !skuEditable && producto?.sku && (
+              <button
+                type="button"
+                onClick={() => setShowSkuEditConfirm(true)}
+                className="secondary"
+                style={{ alignSelf: 'end', fontSize: '0.8rem' }}
+              >
+                Editar SKU
+              </button>
+            )}
             {esAdmin && autogenerarActivo && (
               <label className="check">
                 <input
@@ -656,24 +668,19 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
           onCancel={handleDuplicadoCancel}
         />
       )}
-      {confirmRegenerar && (
-        <div className="modal-backdrop" onClick={() => setConfirmRegenerar(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
-            <header className="modal-header">
-              <h2>Regenerar SKU</h2>
-              <button type="button" onClick={() => setConfirmRegenerar(false)} aria-label="Cerrar">×</button>
-            </header>
-            <p style={{ padding: '1rem' }}>
-              ¿Regenerar el SKU? El SKU actual quedará registrado en el historial.
-            </p>
-            <footer className="modal-footer" style={{ padding: '0 1rem 1rem' }}>
-              <button type="button" onClick={() => setConfirmRegenerar(false)}>Cancelar</button>
-              <button type="button" className="primary" onClick={handleRegenerarSku}>
-                Confirmar
-              </button>
-            </footer>
-          </div>
-        </div>
+      {confirmRegenerar && producto?.sku && (
+        <SkuConfirmDialog
+          currentSku={producto.sku}
+          onConfirm={handleRegenerarSku}
+          onCancel={() => setConfirmRegenerar(false)}
+        />
+      )}
+      {showSkuEditConfirm && producto?.sku && (
+        <SkuConfirmDialog
+          currentSku={producto.sku}
+          onConfirm={handleSkuEditConfirm}
+          onCancel={() => setShowSkuEditConfirm(false)}
+        />
       )}
       {showEditor && editorImage && (
         <ImageEditorBoundary onDismiss={handleEditorCancel}>

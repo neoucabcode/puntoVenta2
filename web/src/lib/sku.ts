@@ -146,6 +146,22 @@ export async function buscarProductosSimilares(
   }))
 }
 
+// Verifica si un SKU está disponible para una empresa via RPC.
+// Devuelve true si el SKU no está en uso.
+export async function verificarSkuDisponible(
+  empresaId: string,
+  sku: string
+): Promise<boolean> {
+  if (!supabase) return true
+
+  const { data, error } = await supabase.rpc('verificar_sku_disponible', {
+    p_empresa_id: empresaId,
+    p_sku: sku,
+  })
+  if (error) throw error
+  return Boolean(data)
+}
+
 // Actualiza la configuración de SKU de la empresa (solo admin).
 // Hace un merge parcial: solo actualiza los campos provistos.
 export async function actualizarConfigSku(

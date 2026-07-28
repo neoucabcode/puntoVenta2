@@ -4,6 +4,8 @@ import {
   aplicarAjusteStock,
   crearProducto,
   crearCategoria,
+  subirImagenProducto,
+  eliminarImagenProducto,
 } from './productos'
 
 const h = vi.hoisted(() => ({
@@ -17,6 +19,12 @@ const h = vi.hoisted(() => ({
   insertError: null as unknown,
   // Empresa resuelta por el mock de ./empresa (mutable para test de nulo).
   empresaId: 'emp-x' as string | null,
+  // Storage mock state
+  uploadPath: null as string | null,
+  uploadOptions: null as Record<string, unknown> | null,
+  uploadError: null as unknown,
+  removePaths: null as string[] | null,
+  removeError: null as unknown,
 }))
 
 vi.mock('../lib/supabase', () => {
@@ -39,7 +47,26 @@ vi.mock('../lib/supabase', () => {
     h.insertTable = table
     return { insert }
   })
-  return { supabase: { rpc, from } }
+
+  const upload = vi.fn(async (path: string, _file: unknown, options?: Record<string, unknown>) => {
+    h.uploadPath = path
+    h.uploadOptions = options ?? null
+    if (h.uploadError) return { data: null, error: h.uploadError }
+    return { data: { path }, error: null }
+  })
+  const getPublicUrl = vi.fn((_path: string) => ({
+    data: { publicUrl: `https://storage.example.com/productos/${_path}` },
+  }))
+  const remove = vi.fn(async (paths: string[]) => {
+    h.removePaths = paths
+    if (h.removeError) return { data: null, error: h.removeError }
+    return { data: null, error: null }
+  })
+  const copy = vi.fn(async () => ({ data: null, error: null }))
+  const storageFrom = vi.fn(() => ({ upload, getPublicUrl, remove, copy }))
+  const storage = { from: storageFrom }
+
+  return { supabase: { rpc, from, storage } }
 })
 
 vi.mock('../lib/empresa', () => ({
@@ -144,5 +171,100 @@ describe('crearCategoria (aislamiento multi-tenant)', () => {
     h.insertArgs = null
     await expect(crearCategoria('Sin empresa')).rejects.toThrow(/empresa/i)
     expect(h.insertArgs).toBeNull()
+  })
+})
+
+describe('subirImagenProducto (UUID-based path)', () => {
+  let origImage: typeof Image | undefined
+  let origCreateElement: typeof document.createElement | undefined
+
+  beforeEach(() => {
+    h.uploadPath = null
+    h.uploadOptions = null
+    h.uploadError = null
+
+    // Mock Image + canvas for convertirAWebp (browser API)
+    origImage = globalThis.Image
+    origCreateElement = document.createElement.bind(document)
+
+    const fakeBlob = new Blob(['webp-data'], { type: 'image/webp' })
+    // @ts-expect-error — test mock
+    globalThis.Image = class {
+      onload: (() => void) | null = null
+      naturalWidth = 100
+      naturalHeight = 100
+      set src(_v: string) {
+        // Simulate async load
+        setTimeout(() => this.onload?.(), 0)
+      }
+    }
+    const mockCtx = {
+      drawImage: vi.fn(),
+      // @ts-expect-error — test mock
+      getImageData: vi.fn(),
+    }
+    document.createElement = vi.fn((tag: string) => {
+      if (tag === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: vi.fn(() => mockCtx),
+          toBlob: (cb: (blob: Blob | null) => void, _type: string, _quality: number) => {
+            cb(fakeBlob)
+          },
+        } as unknown as HTMLCanvasElement
+      }
+      return origCreateElement!(tag)
+    }) as typeof document.createElement
+  })
+
+  afterEach(() => {
+    if (origImage) globalThis.Image = origImage
+    if (origCreateElement) document.createElement = origCreateElement
+  })
+
+  it('usa path empresaId/productoId.webp (no SKU)', async () => {
+    const file = new File(['fake'], 'test.jpg', { type: 'image/jpeg' })
+    const url = await subirImagenProducto(file, 'emp-001', 'prod-abc')
+    expect(h.uploadPath).toBe('emp-001/prod-abc.webp')
+    expect(url).toContain('emp-001/prod-abc.webp')
+  })
+
+  it('envía upsert: true y contentType image/webp', async () => {
+    const file = new File(['fake'], 'test.png', { type: 'image/png' })
+    await subirImagenProducto(file, 'emp-002', 'prod-xyz')
+    expect(h.uploadOptions).toMatchObject({
+      upsert: true,
+      contentType: 'image/webp',
+    })
+  })
+
+  it('lanza si storage devuelve error', async () => {
+    h.uploadError = { message: 'quota exceeded' }
+    const file = new File(['fake'], 'test.jpg', { type: 'image/jpeg' })
+    await expect(subirImagenProducto(file, 'emp-001', 'prod-fail')).rejects.toThrow()
+  })
+})
+
+describe('eliminarImagenProducto (UUID-based path)', () => {
+  beforeEach(() => {
+    h.removePaths = null
+    h.removeError = null
+  })
+
+  it('elimina archivo empresaId/productoId.webp', async () => {
+    await eliminarImagenProducto('emp-001', 'prod-abc')
+    expect(h.removePaths).toEqual(['emp-001/prod-abc.webp'])
+  })
+
+  it('ignora error 404 (resource not found)', async () => {
+    h.removeError = { message: 'The resource was not found' }
+    await expect(eliminarImagenProducto('emp-001', 'prod-gone')).resolves.toBeUndefined()
+    expect(h.removePaths).toEqual(['emp-001/prod-gone.webp'])
+  })
+
+  it('lanza si el error no es 404', async () => {
+    h.removeError = { message: 'Permission denied' }
+    await expect(eliminarImagenProducto('emp-001', 'prod-err')).rejects.toThrow()
   })
 })

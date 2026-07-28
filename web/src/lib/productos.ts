@@ -279,18 +279,18 @@ async function convertirAWebp(file: File): Promise<Blob> {
 export async function subirImagenProducto(
   file: File,
   empresaId: string,
-  sku: string
+  productoId: string
 ): Promise<string> {
   if (!supabase) {
-    return subirImagenProductoMock(file, empresaId, sku)
+    return subirImagenProductoMock(file, empresaId, productoId)
   }
   // Si el archivo ya es webp (ej. salido del ImageEditor), subirlo directo
   // para no re-procesar y perder el crop que el usuario hizo.
   const webpBlob = file.type === 'image/webp'
     ? file
     : await convertirAWebp(file)
-  // Path debe empezar con empresa_id/ para pasar la storage policy (patch_05)
-  const path = `${empresaId}/${sku}.webp`
+  // Path usa productoId (UUID) en vez de SKU para desacoplar imagen de SKU.
+  const path = `${empresaId}/${productoId}.webp`
   console.log('[subirImagen] path:', path, 'tipo:', webpBlob.type, 'tamaño:', webpBlob.size, 'fileType:', file.type)
   const { data, error } = await supabase.storage
     .from('productos')
@@ -308,29 +308,11 @@ export async function subirImagenProducto(
   return cacheBustedUrl
 }
 
-export async function renombrarImagen(
-  empresaId: string,
-  oldSku: string,
-  newSku: string,
-  _ext: string
-): Promise<void> {
-  if (!supabase) return
-  const bucket = supabase.storage.from('productos')
-  const oldPath = `${empresaId}/${oldSku}.webp`
-  const newPath = `${empresaId}/${newSku}.webp`
-  // Copiar archivo a nueva ubicación
-  const { error: copyError } = await bucket.copy(oldPath, newPath)
-  if (copyError) throw copyError
-  // Eliminar archivo antiguo
-  const { error: deleteError } = await bucket.remove([oldPath])
-  if (deleteError) throw deleteError
-}
-
 // FIX: Eliminar imagen de Storage al quitar imagen del formulario.
 // Evita archivos huérfanos en Supabase Storage.
-export async function eliminarImagenProducto(empresaId: string, sku: string): Promise<void> {
+export async function eliminarImagenProducto(empresaId: string, productoId: string): Promise<void> {
   if (!supabase) return
-  const filePath = `${empresaId}/${sku}.webp`
+  const filePath = `${empresaId}/${productoId}.webp`
   const { error } = await supabase.storage.from('productos').remove([filePath])
   // Ignorar error 404 (archivo ya no existe) — solo lanzar errores reales.
   if (error && error.message !== 'The resource was not found') {
@@ -390,18 +372,18 @@ export async function eliminarProducto(id: string): Promise<void> {
   if (!empresaId) {
     throw new Error('No se pudo determinar la empresa')
   }
-  // Obtener sku e imagen_url antes de borrar la fila para limpiar Storage.
+  // Obtener id e imagen_url antes de borrar la fila para limpiar Storage.
   const { data: producto, error: fetchError } = await supabase
     .from('producto')
-    .select('sku,imagen_url')
+    .select('id,imagen_url')
     .eq('id', id)
     .eq('empresa_id', empresaId)
     .single()
   if (fetchError) throw fetchError
 
-  // Si tiene imagen subida a Storage, eliminar el archivo.
-  if (producto?.imagen_url && producto?.sku) {
-    const filePath = `${empresaId}/${producto.sku}.webp`
+  // Si tiene imagen subida a Storage, eliminar el archivo (path = empresa_id/producto_id.webp).
+  if (producto?.imagen_url) {
+    const filePath = `${empresaId}/${producto.id}.webp`
     const { error: storageError } = await supabase.storage
       .from('productos')
       .remove([filePath])
