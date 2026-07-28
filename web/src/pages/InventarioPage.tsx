@@ -13,7 +13,9 @@ import {
   type Categoria,
 } from '../lib/productos'
 import { obtenerMiEmpresaId } from '../lib/empresa'
+import { exportarCatalogo } from '../lib/catalogo'
 import { ProductoForm } from '../components/ProductoForm'
+import { CatalogImportModal } from '../components/CatalogImportModal'
 import { DataTable } from '../components/DataTable'
 import { ConfirmarEliminarModal } from '../components/ConfirmarEliminarModal'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
@@ -30,7 +32,7 @@ function esBajoStock(p: ProductoJoin): boolean {
 type DeleteTarget = { producto: ProductoJoin; mode: 'desactivar' | 'eliminar' }
 
 export function InventarioPage() {
-  const { inventarioHabilitado } = useUsuarioRol()
+  const { inventarioHabilitado, esAdmin } = useUsuarioRol()
 
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
@@ -43,6 +45,8 @@ export function InventarioPage() {
   const [showNuevo, setShowNuevo] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleteSaving, setDeleteSaving] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
@@ -126,6 +130,26 @@ export function InventarioPage() {
     }
   }
 
+  async function onExportarCatalogo() {
+    setExporting(true)
+    setActionError('')
+    try {
+      const empresaId = await obtenerMiEmpresaId()
+      if (!empresaId) throw new Error('No se pudo determinar la empresa')
+      const blob = await exportarCatalogo(empresaId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `catalogo-${new Date().toISOString().slice(0, 10)}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setActionError((err as Error).message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
 
   if (!inventarioHabilitado) {
     return (
@@ -191,8 +215,34 @@ export function InventarioPage() {
               title="Lista"
             ><span className="material-symbols-outlined">list</span></button>
           </div>
-          <button className="primary" onClick={() => setShowNuevo(true)}>
-            <span className="material-symbols-outlined">add</span> Nuevo producto
+          {esAdmin && (
+            <>
+              <button
+                className="icon-only"
+                onClick={() => void onExportarCatalogo()}
+                disabled={exporting}
+                title="Exportar catálogo"
+                aria-label="Exportar catálogo"
+              >
+                <span className="material-symbols-outlined">download</span>
+              </button>
+              <button
+                className="icon-only"
+                onClick={() => setShowImportModal(true)}
+                title="Importar catálogo"
+                aria-label="Importar catálogo"
+              >
+                <span className="material-symbols-outlined">upload</span>
+              </button>
+            </>
+          )}
+          <button
+            className="primary icon-only"
+            onClick={() => setShowNuevo(true)}
+            title="Nuevo producto"
+            aria-label="Nuevo producto"
+          >
+            <span className="material-symbols-outlined">add</span>
           </button>
         </div>
       </header>
@@ -383,6 +433,16 @@ export function InventarioPage() {
           onConfirm={() => void onConfirmDelete()}
           onCancel={() => setDeleteTarget(null)}
           saving={deleteSaving}
+        />
+      )}
+
+      {showImportModal && (
+        <CatalogImportModal
+          onClose={() => setShowImportModal(false)}
+          onImported={() => {
+            setShowImportModal(false)
+            reset()
+          }}
         />
       )}
     </div>

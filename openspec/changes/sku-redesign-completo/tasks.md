@@ -50,16 +50,16 @@ Decision needed before apply: Yes
 
 - [x] 4.1 **RED** Test `exportarCatalogo` — mock Supabase, verify ZIP structure
 - [x] 4.2 **GREEN** Create `catalogo.ts` — `exportarCatalogo`: fetch data, build ZIP via JSZip
-- [ ] 4.3 **RED** Test `importarCatalogo` — verify category dedup, product creation
-- [ ] 4.4 **GREEN** Add `importarCatalogo` — parse ZIP, create categories/products/images
-- [ ] 4.5 **RED** Test `CatalogImportModal` drag & drop + progress display
-- [ ] 4.6 **GREEN** Create `CatalogImportModal.tsx` — drag & drop, validation, progress
-- [ ] 4.7 Add export/import buttons to `InventarioPage.tsx` — admin-gated
+- [x] 4.3 **RED** Test `importarCatalogo` — verify category dedup, product creation
+- [x] 4.4 **GREEN** Add `importarCatalogo` — parse ZIP, create categories/products/images
+- [x] 4.5 **RED** Test `CatalogImportModal` drag & drop + progress display
+- [x] 4.6 **GREEN** Create `CatalogImportModal.tsx` — drag & drop, validation, progress
+- [x] 4.7 Add export/import buttons to `InventarioPage.tsx` — admin-gated
 
 ## Phase 5: Backfill & Polish
 
-- [ ] 5.1 Create `patch_13_backfill_image_paths.sql` — idempotent path mapping
+- [x] 5.1 Create `patch_13_backfill_image_paths.sql` — idempotent path mapping
 - [ ] 5.2 Create `backfill-images.ts` — copy `${sku}.webp` → `${productoId}.webp`, verify, delete old
 - [ ] 5.3 Add CSS to `index.css` for new components
 - [ ] 5.4 Add test for `eliminarProducto` UUID-based cleanup
-- [ ] 5.5 Run full suite: `cd web && npx vitest run`
+- [x] 5.5 Run full suite: `cd web && npx vitest run`
