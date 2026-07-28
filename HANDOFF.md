@@ -91,7 +91,39 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-27, session: POS refactor completo)
+## Estado actual (última actualización: 2026-07-28, session: UI Inventario cleanup)
+
+### UI Inventario — Limpieza (2026-07-28)
+
+**Cambios en toolbar de Inventario:**
+- Eliminados botones: "Ajuste de stock", "Historial", "Configurar SKU"
+- Eliminado el contador de productos (`div.inv-head`) de la toolbar
+- Eliminados componentes: `HistorialModal.tsx`, `SkuConfigForm.tsx` (solo se usaban en inventario)
+- Eliminado modal inline de ajuste de stock (~46 líneas)
+- Limpiado CSS: bloque `hist-*` de `index.css`
+
+**Reducción de espacio topbar→toolbar:**
+- Padding-top de `.content` reducido de `var(--sp-4)` a `var(--sp-1)`
+- Aplica a Inventario y Catálogo
+
+#### Archivos modificados
+| Archivo | Acción |
+|---------|--------|
+| `pages/InventarioPage.tsx` | Toolbar simplificada, -160 líneas |
+| `pages/InventarioPage.test.tsx` | Test actualizado |
+| `components/HistorialModal.tsx` | **Eliminado** |
+| `components/SkuConfigForm.tsx` | **Eliminado** |
+| `index.css` | Padding reducido, CSS historial removido |
+
+#### Verificación
+- TypeScript: 0 errores
+- Tests: 61/61 pasan
+
+### Pendiente Inventario
+- El toolbar ahora tiene solo: búsqueda, filtro categorías, toggle vista, "Nuevo producto"
+- Las funcionalidades eliminadas (ajuste stock, historial, config SKU) se pueden re-implementar como componentes separados si se necesitan en el futuro
+
+### Refactor POS completo (2026-07-27)
 
 ### Refactor POS completo (2026-07-27)
 
@@ -151,6 +183,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - RPC server-side (`aplicar_venta_offline`) necesita update para aceptar `version: 2` del payload
 - Catch silenciosos en `listarCategorias`/`obtenerMiEmpresa` (deuda conocida)
 - IVA 16% y IGTF 3% hardcoded (correcto para Venezuela actual)
+- Ajuste de stock, historial y config SKU eliminados del toolbar — re-implementar si se necesitan
 
 ## Deuda técnica real (auditoría 2026-07-24 verificada)
 - 🔴 **Fuga de Storage multi-tenant** — `productos_public_read` expone objetos sin chequear `empresa_id` (cualquier usuario autenticado ve imágenes de TODAS las empresas). `productos_auth_insert` no existe (cualquiera sube a cualquier carpeta). **Fix:** agregar `foldername(name)[1] = mi_empresa_id()` a SELECT e INSERT policies. (Postergado: dueño único, pero bloquea multi-tenant real).
