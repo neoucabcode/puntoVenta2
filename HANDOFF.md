@@ -91,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-28, session: SKU Redesign Completo)
+## Estado actual (última actualización: 2026-07-28, session: SKU Redesign + Configuración Empresa)
 
 ### UI Inventario — Limpieza (2026-07-28)
 
@@ -161,6 +161,31 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - Tests: 126/126 pasan (61 originales + 65 nuevos)
 
 ### Pendiente conocido
+
+### Página de Configuración de Empresa (2026-07-28)
+
+**Cambio SDD:** `configuracion-empresa` — página admin con 3 secciones.
+
+#### Funcionalidad
+- **Ruta:** `/configuracion` (solo admin)
+- **Navegación:** ícono settings en avatar dropdown del topbar
+- **3 tabs:**
+  - **SKU:** toggle auto-gen, plantilla, modo contador, longitud, prefijo, umbral similitud
+  - **Empresa:** tasa activa, IGTF, venta sin stock, stock negativo
+  - **Módulos:** habilitar/deshabilitar catálogo, venta, inventario, caja, reportes
+
+#### Archivos creados/modificados
+| Archivo | Acción |
+|---------|--------|
+| `pages/ConfiguracionPage.tsx` | **Nuevo** — página principal con 3 tabs |
+| `components/ConfirmModal.tsx` | **Nuevo** — modal de confirmación genérico |
+| `lib/empresa.ts` | Modificado — `actualizarMiEmpresa()` |
+| `components/TopbarUnificada.tsx` | Modificado — nav item admin-only |
+| `main.tsx` | Modificado — ruta `/configuracion` |
+
+#### Verificación
+- TypeScript: 0 errores
+- Tests: 142/142 pasan (126 + 16 nuevos)
 
 ### Refactor POS completo (2026-07-27)
 

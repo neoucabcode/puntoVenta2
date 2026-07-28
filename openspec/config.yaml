@@ -1,0 +1,38 @@
+schema: spec-driven
+
+context: |
+  Stack: React 18 PWA (Vite) + Supabase (Postgres/RLS/Auth/Storage) + TypeScript
+  Architecture: Multi-tenant SaaS (empresa_id + RLS), offline-first POS
+  Testing: Vitest + React Testing Library + happy-dom + fake-indexeddb
+  Style: Spanish UI (neutral/professional), Zustand state, react-router-dom v6
+  Deploy: Netlify (web/ base)
+  Domain: Ferreteria bimonetaria Venezuela (BS/USD)
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Consider multi-tenant isolation (RLS) impact
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Account for offline-first constraints where relevant
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+    - Note RLS policy implications
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing code patterns
+      - Spanish identifiers and UI copy (neutral/professional)
+      - Respect multi-tenant isolation boundaries
+    tdd: true
+    test_command: "cd web && npx vitest run"
+  verify:
+    test_command: "cd web && npx vitest run"
+    build_command: "cd web && npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
