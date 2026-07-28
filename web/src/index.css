@@ -320,6 +320,34 @@ button { font-family: var(--font); }
 .nueva-cat .row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
 .nueva-cat .row input { flex: 1; padding: 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-base); color: var(--text-primary); }
 
+/* ---------- Catálogo toolbar responsive — unified scale ---------- */
+@media (max-width: 600px) {
+  .catalogo-toolbar {
+    gap: clamp(0.2rem, 0.8vw, 0.4rem) clamp(0.3rem, 1vw, 0.6rem);
+    padding: clamp(0.25rem, 1vw, 0.5rem) clamp(0.35rem, 1.2vw, 0.75rem);
+    margin-bottom: clamp(0.3rem, 1vw, 0.5rem);
+  }
+  .catalogo-filtros { gap: clamp(0.2rem, 0.6vw, 0.3rem); }
+  .catalogo-head-actions { gap: clamp(0.2rem, 0.6vw, 0.3rem); }
+  .catalogo-head-actions .buscador {
+    padding: clamp(0.25rem, 0.8vw, 0.4rem) clamp(0.35rem, 1vw, 0.6rem);
+    font-size: clamp(0.6rem, 2vw, 0.85rem);
+    flex-basis: clamp(80px, 20vw, 150px);
+  }
+  .catalogo-toolbar .primary,
+  .catalogo-toolbar .toggle-vista button {
+    padding: clamp(0.25rem, 0.8vw, 0.4rem) clamp(0.35rem, 1vw, 0.6rem);
+    font-size: clamp(0.6rem, 2vw, 0.85rem);
+  }
+  .catalogo-toolbar .primary .material-symbols-outlined,
+  .catalogo-toolbar .toggle-vista .material-symbols-outlined {
+    font-size: clamp(0.8rem, 2.5vw, 1.1rem);
+  }
+  .catalogo-head-actions .check { font-size: clamp(0.6rem, 1.5vw, 0.85rem); }
+  .filtro-cat-mobile { padding: clamp(0.2rem, 0.6vw, 0.35rem) clamp(0.3rem, 0.8vw, 0.5rem); font-size: clamp(0.55rem, 1.5vw, 0.75rem); }
+  .filtro-cat-mobile .material-symbols-outlined { font-size: clamp(0.7rem, 2vw, 1rem); }
+}
+
 /* ---------- Catálogo layout ---------- */
 .catalogo { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .catalogo-body { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-height: 0; align-items: stretch; }
@@ -1991,16 +2019,29 @@ button { font-family: var(--font); }
 .inv-acciones .buscador:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); transform: translateY(-1px); }
 .num-tab { font-variant-numeric: tabular-nums; }
 
-/* ---------- Inventory toolbar responsive ---------- */
+/* ---------- Inventory toolbar responsive — unified scale ---------- */
 @media (max-width: 600px) {
-  .inv-toolbar { gap: 0.25rem 0.4rem; padding: 0.35rem 0.5rem; margin-bottom: 0.5rem; }
-  .inv-filtros { gap: 0.3rem; }
-  .inv-acciones { gap: 0.3rem; }
-  .inv-acciones .buscador { padding: 0.3rem 0.45rem; font-size: clamp(0.7rem, 2vw, 0.85rem); flex-basis: 100px; }
-  .inv-acciones .primary { font-size: clamp(0.55rem, 1.5vw, 0.8rem); padding: clamp(0.2rem, 0.6vw, 0.4rem) clamp(0.35rem, 1vw, 0.65rem); }
-  .inv-acciones .primary .material-symbols-outlined { font-size: clamp(0.8rem, 2vw, 1.1rem); }
-  .toggle-vista button { padding: clamp(0.2rem, 0.5vw, 0.35rem); }
-  .toggle-vista .material-symbols-outlined { font-size: clamp(0.8rem, 2vw, 1.1rem); }
+  .inv-toolbar {
+    gap: clamp(0.2rem, 0.8vw, 0.4rem) clamp(0.3rem, 1vw, 0.6rem);
+    padding: clamp(0.25rem, 1vw, 0.5rem) clamp(0.35rem, 1.2vw, 0.75rem);
+    margin-bottom: clamp(0.3rem, 1vw, 0.5rem);
+  }
+  .inv-filtros { gap: clamp(0.2rem, 0.6vw, 0.3rem); }
+  .inv-acciones { gap: clamp(0.2rem, 0.6vw, 0.3rem); }
+  .inv-acciones .buscador {
+    padding: clamp(0.25rem, 0.8vw, 0.4rem) clamp(0.35rem, 1vw, 0.6rem);
+    font-size: clamp(0.6rem, 2vw, 0.85rem);
+    flex-basis: clamp(80px, 20vw, 150px);
+  }
+  .inv-acciones .primary,
+  .toggle-vista button {
+    padding: clamp(0.25rem, 0.8vw, 0.4rem) clamp(0.35rem, 1vw, 0.6rem);
+    font-size: clamp(0.6rem, 2vw, 0.85rem);
+  }
+  .inv-acciones .primary .material-symbols-outlined,
+  .toggle-vista .material-symbols-outlined {
+    font-size: clamp(0.8rem, 2.5vw, 1.1rem);
+  }
 }
 
 .inv-badge-bajo {
