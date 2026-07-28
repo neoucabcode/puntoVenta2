@@ -6,7 +6,7 @@ import {
   desactivarProducto,
   reactivarProducto,
   eliminarProducto,
-  crearCategoria,
+
   calcularValuacion,
   registrarHistorial,
   type ProductoJoin,
@@ -41,8 +41,6 @@ export function InventarioPage() {
 
   const [editId, setEditId] = useState<string | null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
-  const [nuevaCategoria, setNuevaCategoria] = useState('')
-
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleteSaving, setDeleteSaving] = useState(false)
 
@@ -128,18 +126,6 @@ export function InventarioPage() {
     }
   }
 
-  async function onCrearCategoria() {
-    const n = nuevaCategoria.trim()
-    if (!n) return
-    try {
-      const c = await crearCategoria(n)
-      setCategorias((prev) => [...prev, c].sort((a, b) => a.nombre.localeCompare(b.nombre)))
-      setCategoriaFiltro(c.id)
-      setNuevaCategoria('')
-    } catch (err) {
-      setActionError((err as Error).message)
-    }
-  }
 
   if (!inventarioHabilitado) {
     return (
@@ -205,18 +191,6 @@ export function InventarioPage() {
               title="Lista"
             ><span className="material-symbols-outlined">list</span></button>
           </div>
-          <details className="nueva-cat">
-            <summary>+ Categoría</summary>
-            <div className="row">
-              <input
-                placeholder="Nombre"
-                value={nuevaCategoria}
-                onChange={(e) => setNuevaCategoria(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void onCrearCategoria() }}
-              />
-              <button onClick={() => void onCrearCategoria()}>Crear</button>
-            </div>
-          </details>
           <button className="primary" onClick={() => setShowNuevo(true)}>
             <span className="material-symbols-outlined">add</span> Nuevo producto
           </button>

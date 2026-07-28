@@ -1991,6 +1991,18 @@ button { font-family: var(--font); }
 .inv-acciones .buscador:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); transform: translateY(-1px); }
 .num-tab { font-variant-numeric: tabular-nums; }
 
+/* ---------- Inventory toolbar responsive ---------- */
+@media (max-width: 600px) {
+  .inv-toolbar { gap: 0.25rem 0.4rem; padding: 0.35rem 0.5rem; margin-bottom: 0.5rem; }
+  .inv-filtros { gap: 0.3rem; }
+  .inv-acciones { gap: 0.3rem; }
+  .inv-acciones .buscador { padding: 0.3rem 0.45rem; font-size: clamp(0.7rem, 2vw, 0.85rem); flex-basis: 100px; }
+  .inv-acciones .primary { font-size: clamp(0.55rem, 1.5vw, 0.8rem); padding: clamp(0.2rem, 0.6vw, 0.4rem) clamp(0.35rem, 1vw, 0.65rem); }
+  .inv-acciones .primary .material-symbols-outlined { font-size: clamp(0.8rem, 2vw, 1.1rem); }
+  .toggle-vista button { padding: clamp(0.2rem, 0.5vw, 0.35rem); }
+  .toggle-vista .material-symbols-outlined { font-size: clamp(0.8rem, 2vw, 1.1rem); }
+}
+
 .inv-badge-bajo {
   display: inline-flex; align-items: center; gap: 0.25rem;
   margin-left: 0.5rem; padding: 0.1rem 0.45rem; border-radius: 999px;
