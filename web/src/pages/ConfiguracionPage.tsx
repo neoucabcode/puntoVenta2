@@ -51,7 +51,6 @@ export function ConfiguracionPage() {
 
   // Modulos state
   const [moduloToToggle, setModuloToToggle] = useState<{ nombre: string; habilitado: boolean } | null>(null)
-  const [moduloSaving, setModuloSaving] = useState(false)
 
   // Initialize SKU state from config when loaded
   const configRefLoaded = useState({ done: false })
@@ -67,10 +66,8 @@ export function ConfiguracionPage() {
 
   // Initialize empresa state
   const empresaRefLoaded = useState({ done: false })
-  const [empresaData, setEmpresaData] = useState<Awaited<ReturnType<typeof obtenerMiEmpresa>>>(null)
   useState(() => {
     obtenerMiEmpresa().then((e) => {
-      setEmpresaData(e)
       if (e && !empresaRefLoaded[0].done) {
         empresaRefLoaded[0].done = true
         setTasaActiva(e.tasa_activa)
@@ -128,15 +125,12 @@ export function ConfiguracionPage() {
 
   async function handleToggleModulo() {
     if (!moduloToToggle) return
-    setModuloSaving(true)
     try {
       await toggleModulo(moduloToToggle.nombre, moduloToToggle.habilitado)
       await refrescarModulos()
       setModuloToToggle(null)
     } catch (err) {
       console.error('[Configuracion] Error al toggle módulo:', err)
-    } finally {
-      setModuloSaving(false)
     }
   }
 
