@@ -13,6 +13,9 @@ import { RequireModulo } from './components/RequireModulo'
 const InventarioPage = lazy(() =>
   import('./pages/InventarioPage').then((m) => ({ default: m.InventarioPage }))
 )
+const ConfiguracionPage = lazy(() =>
+  import('./pages/ConfiguracionPage').then((m) => ({ default: m.ConfiguracionPage }))
+)
 import { Layout } from './components/Layout'
 import { useCajaStore } from './store/useCajaStore'
 import { iniciarAutoSync } from './lib/autoSync'
@@ -78,6 +81,18 @@ function Root() {
                 </Suspense>
               </Layout>
             </RequireModulo>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/configuracion"
+        element={
+          <RequireAuth>
+            <Layout>
+              <Suspense fallback={<p className="center">Cargando…</p>}>
+                <ConfiguracionPage />
+              </Suspense>
+            </Layout>
           </RequireAuth>
         }
       />

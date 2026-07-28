@@ -34,7 +34,7 @@ export function TopbarUnificada() {
   const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
 
-  const { inventarioHabilitado } = useUsuarioRol()
+  const { inventarioHabilitado, esAdmin } = useUsuarioRol()
   const { estaHabilitado } = useModulos()
 
   const [menuOpen, setMenuOpen] = useState(false)
@@ -135,6 +135,16 @@ export function TopbarUnificada() {
                 </span>
                 {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
               </button>
+              {esAdmin && (
+                <NavLink
+                  to="/configuracion"
+                  className="topbar-dropdown-item"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <span className="material-symbols-outlined">settings</span>
+                  Configuración
+                </NavLink>
+              )}
               <button className="topbar-dropdown-item topbar-dropdown-logout" onClick={onLogout}>
                 <span className="material-symbols-outlined">logout</span>
                 Salir

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { getMockEmpresa, getMockEmpresaId, getMockUsuarioId } from './mock-data'
+import { getMockEmpresa, getMockEmpresaId, getMockUsuarioId, actualizarEmpresaMock } from './mock-data'
 
 export type Empresa = {
   id: string
@@ -43,6 +43,31 @@ export async function obtenerMiEmpresa(): Promise<Empresa | null> {
     .single()
   if (error) return null
   return (data as Empresa) ?? null
+}
+
+// Actualiza campos parciales de la empresa del usuario actual (solo admin).
+// Hace un merge parcial: solo actualiza los campos provistos.
+export async function actualizarMiEmpresa(
+  updates: Partial<Pick<Empresa, 'tasa_activa' | 'igtf_habilitado' | 'venta_sin_stock' | 'stock_negativo'>>
+): Promise<void> {
+  if (!supabase) {
+    await actualizarEmpresaMock(updates)
+    return
+  }
+
+  const empresaId = await obtenerMiEmpresaId()
+  if (!empresaId) throw new Error('No se pudo resolver empresa_id')
+
+  const { error } = await supabase
+    .from('empresa')
+    .update({
+      ...(updates.tasa_activa !== undefined && { tasa_activa: updates.tasa_activa }),
+      ...(updates.igtf_habilitado !== undefined && { igtf_habilitado: updates.igtf_habilitado }),
+      ...(updates.venta_sin_stock !== undefined && { venta_sin_stock: updates.venta_sin_stock }),
+      ...(updates.stock_negativo !== undefined && { stock_negativo: updates.stock_negativo }),
+    })
+    .eq('id', empresaId)
+  if (error) throw error
 }
 
 // Cache de empresa_id para no consultarlo en cada búsqueda paginada.

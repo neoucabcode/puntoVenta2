@@ -291,6 +291,15 @@ export function getMockUsuarioId(): string | null {
   return state.session?.user?.id ?? null
 }
 
+export async function actualizarEmpresaMock(
+  updates: Partial<Pick<MockCompany, 'tasa_activa' | 'igtf_habilitado' | 'venta_sin_stock' | 'stock_negativo'>>
+): Promise<void> {
+  const state = readState()
+  if (!state.company) throw new Error('No hay empresa en modo local')
+  state.company = { ...state.company, ...updates }
+  persistState(state)
+}
+
 export async function listarProductosMock(opts?: {
   search?: string
   categoriaId?: string | null
