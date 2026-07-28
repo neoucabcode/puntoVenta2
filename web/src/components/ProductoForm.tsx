@@ -20,6 +20,9 @@ import { DuplicadoAlert } from './DuplicadoAlert'
 import { ImageEditor } from './ImageEditor'
 import { ImageEditorBoundary } from './ImageEditorBoundary'
 import { SkuConfirmDialog } from './SkuConfirmDialog'
+import { useSkuDisponibilidad } from '../hooks/useSkuDisponibilidad'
+import { SkuAvailabilityIndicator } from './SkuAvailabilityIndicator'
+import { SkuSimilarDropdown } from './SkuSimilarDropdown'
 import { validarImagen } from '../lib/imageUtils'
 
 type Props = {
@@ -55,6 +58,8 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const { esAdmin } = useUsuarioRol()
   const { skuPreview, generando: skuGenerando } = useSkuPreview(categoriaId || null)
 
+  const { disponible, verificando } = useSkuDisponibilidad(sku, empresaId)
+
   const autogenerarActivo = config?.autogenerar_activo ?? false
   const [autoGenEnabled, setAutoGenEnabled] = useState(autogenerarActivo)
   const [similares, setSimilares] = useState<
@@ -66,10 +71,44 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [showSkuEditConfirm, setShowSkuEditConfirm] = useState(false)
   const [skuEditable, setSkuEditable] = useState(false)
 
+  const [empresaId, setEmpresaId] = useState<string | null>(null)
+
+  const [similarSkus, setSimilarSkus] = useState<
+    Array<{ id: string; nombre: string; sku: string; similitud: number }>
+  >([])
+
   // When config loads, sync admin toggle default
   useEffect(() => {
     setAutoGenEnabled(autogenerarActivo)
   }, [autogenerarActivo])
+
+  // Fetch empresaId on mount
+  useEffect(() => {
+    obtenerMiEmpresaId().then(setEmpresaId)
+  }, [])
+
+  // Fetch similar products when SKU changes (debounced)
+  useEffect(() => {
+    if (!sku.trim() || !empresaId) {
+      setSimilarSkus([])
+      return
+    }
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const similares = await buscarProductosSimilares(empresaId, sku.trim())
+        if (!cancelled) setSimilarSkus(similares)
+      } catch {
+        if (!cancelled) setSimilarSkus([])
+      }
+    }, 300)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [sku, empresaId])
 
   // Sync SKU preview into state when auto-gen is active
   useEffect(() => {
@@ -447,19 +486,27 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
               Nombre*
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
             </label>
-            <label>
-              {esEdicion && !skuEditable
-                ? 'SKU (inmutable)'
-                : autogenerarActivo && !esAdmin
-                  ? 'SKU (generado automáticamente)'
-                  : 'SKU'}
-              <input
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                disabled={skuReadOnly}
-                readOnly={skuReadOnly}
+            <div style={{ gridColumn: 'span 2', position: 'relative' }}>
+              <label>
+                {esEdicion && !skuEditable
+                  ? 'SKU (inmutable)'
+                  : autogenerarActivo && !esAdmin
+                    ? 'SKU (generado automáticamente)'
+                    : 'SKU'}
+                <input
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  disabled={skuReadOnly}
+                  readOnly={skuReadOnly}
+                />
+              </label>
+              <SkuAvailabilityIndicator verificando={verificando} disponible={disponible} />
+              <SkuSimilarDropdown
+                productos={similarSkus}
+                onSelect={(producto) => setSku(producto.sku)}
+                onDismiss={() => setSimilarSkus([])}
               />
-            </label>
+            </div>
             {esEdicion && esAdmin && !skuEditable && producto?.sku && (
               <button
                 type="button"

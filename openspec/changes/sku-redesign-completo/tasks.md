@@ -31,17 +31,17 @@ Decision needed before apply: Yes
 
 ## Phase 2: Real-Time SKU Feedback
 
-- [ ] 2.1 **RED** Test `useSkuDisponibilidad` debounce + state transitions
-- [ ] 2.2 **GREEN** Create `useSkuDisponibilidad.ts` — 300ms debounce, RPC, returns `{ disponible, verificando }`
-- [ ] 2.3 **RED** Test `SkuAvailabilityIndicator` rendering (spinner/available/taken)
-- [ ] 2.4 **GREEN** Create `SkuAvailabilityIndicator.tsx` — spinner, ✅ "Disponible", ❌ "Ya existe"
-- [ ] 2.5 **RED** Test `SkuSimilarDropdown` selection and dismiss
-- [ ] 2.6 **GREEN** Create `SkuSimilarDropdown.tsx` — dropdown with `{ productos, onSelect, onDismiss }`
+- [x] 2.1 **RED** Test `useSkuDisponibilidad` debounce + state transitions
+- [x] 2.2 **GREEN** Create `useSkuDisponibilidad.ts` — 300ms debounce, RPC, returns `{ disponible, verificando }`
+- [x] 2.3 **RED** Test `SkuAvailabilityIndicator` rendering (spinner/available/taken)
+- [x] 2.4 **GREEN** Create `SkuAvailabilityIndicator.tsx` — spinner, ✅ "Disponible", ❌ "Ya existe"
+- [x] 2.5 **RED** Test `SkuSimilarDropdown` selection and dismiss
+- [x] 2.6 **GREEN** Create `SkuSimilarDropdown.tsx` — dropdown with `{ productos, onSelect, onDismiss }`
 
 ## Phase 3: Form Integration
 
-- [ ] 3.1 Wire `useSkuDisponibilidad` into `ProductoForm.tsx` — render indicator
-- [ ] 3.2 Add similar products dropdown to `ProductoForm.tsx`
+- [x] 3.1 Wire `useSkuDisponibilidad` into `ProductoForm.tsx` — render indicator
+- [x] 3.2 Add similar products dropdown to `ProductoForm.tsx`
 - [x] 3.3 Replace inline confirm with `SkuConfirmDialog` in `ProductoForm.tsx`
 - [x] 3.4 Remove `renombrarImagen` call from `handleRegenerarSku`
 - [x] 3.5 Pass `productoId` (not SKU) to `subirImagenProducto`
