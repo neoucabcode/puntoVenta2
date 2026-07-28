@@ -22,6 +22,7 @@ export function CatalogoPage() {
 
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
+  const filtroCatRef = useRef<HTMLSelectElement>(null)
 
   // Memoizar filtros: el hook solo resetea offset cuando cambia la referencia
   const filters = useMemo(
@@ -85,6 +86,7 @@ export function CatalogoPage() {
       <header className="catalogo-toolbar">
         <div className="catalogo-filtros">
           <select
+            ref={filtroCatRef}
             className="filtro-cat"
             value={categoriaFiltro}
             onChange={(e) => setCategoriaFiltro(e.target.value)}
@@ -95,6 +97,19 @@ export function CatalogoPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
+          <button
+            className="filtro-cat-mobile"
+            type="button"
+            aria-label="Filtrar por categoría"
+            onClick={() => {
+              const sel = filtroCatRef.current
+              if (sel?.showPicker) sel.showPicker()
+              else sel?.click()
+            }}
+          >
+            <span className="material-symbols-outlined">category</span>
+            <span className="filtro-cat-label">Cat</span>
+          </button>
         </div>
         <div className="catalogo-head-actions">
           <input

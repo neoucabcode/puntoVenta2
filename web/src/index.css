@@ -265,6 +265,35 @@ button { font-family: var(--font); }
   font-size: 0.9rem; max-width: 240px; cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .filtro-cat:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* Category filter — mobile compact button */
+.filtro-cat-mobile {
+  display: none;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.filtro-cat-mobile .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 600px) {
+  .filtro-cat {
+    display: none;
+  }
+  .filtro-cat-mobile {
+    display: inline-flex;
+  }
+}
+
 .catalogo-head-actions { display: flex; gap: 0.5rem; align-items: center; flex: 1 1 auto; justify-content: flex-end; }
 .catalogo-head-actions .buscador { flex: 1 1 150px; min-width: 0; padding: 0.4rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); font-size: 0.95rem; transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease; }
 .catalogo-head-actions .buscador:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); transform: translateY(-1px); }
