@@ -328,16 +328,18 @@ button { font-family: var(--font); }
     padding: 0.5em 0.75em;
     margin-bottom: 0.5em;
   }
+  /* Every child inherits em from toolbar font-size */
   .catalogo-filtros { gap: 0.5em; }
+  .catalogo-filtros .filtro-cat { padding: 0.5em 0.6em; font-size: 1em; max-width: none; }
+  .catalogo-filtros .filtro-cat-mobile { padding: 0.35em 0.55em; font-size: 0.9em; gap: 0.2em; }
+  .catalogo-filtros .filtro-cat-mobile .material-symbols-outlined { font-size: 1.1em; }
   .catalogo-head-actions { gap: 0.4em; }
   .catalogo-head-actions .buscador { padding: 0.4em 0.6em; font-size: 1em; flex-basis: 10em; }
+  .catalogo-head-actions .check { font-size: 0.9em; gap: 0.3em; }
   .catalogo-toolbar .primary { padding: 0.4em 0.7em; font-size: 1em; gap: 0.3em; }
   .catalogo-toolbar .primary .material-symbols-outlined { font-size: 1.1em; }
   .catalogo-toolbar .toggle-vista button { padding: 0.4em 0.5em; }
   .catalogo-toolbar .toggle-vista .material-symbols-outlined { font-size: 1.1em; }
-  .catalogo-head-actions .check { font-size: 0.9em; }
-  .filtro-cat-mobile { padding: 0.35em 0.55em; font-size: 0.9em; gap: 0.2em; }
-  .filtro-cat-mobile .material-symbols-outlined { font-size: 1.1em; }
 }
 
 /* ---------- Catálogo layout ---------- */
@@ -2019,15 +2021,17 @@ button { font-family: var(--font); }
     padding: 0.5em 0.75em;
     margin-bottom: 0.5em;
   }
+  /* Every child inherits em from toolbar font-size */
   .inv-filtros { gap: 0.5em; }
+  .inv-filtros .filtro-cat { padding: 0.5em 0.6em; font-size: 1em; max-width: none; }
+  .inv-filtros .filtro-cat-mobile { padding: 0.35em 0.55em; font-size: 0.9em; gap: 0.2em; }
+  .inv-filtros .filtro-cat-mobile .material-symbols-outlined { font-size: 1.1em; }
   .inv-acciones { gap: 0.4em; }
   .inv-acciones .buscador { padding: 0.4em 0.6em; font-size: 1em; flex-basis: 10em; }
   .inv-acciones .primary { padding: 0.4em 0.7em; font-size: 1em; gap: 0.3em; }
   .inv-acciones .primary .material-symbols-outlined { font-size: 1.1em; }
   .toggle-vista button { padding: 0.4em 0.5em; }
   .toggle-vista .material-symbols-outlined { font-size: 1.1em; }
-  .filtro-cat-mobile { padding: 0.35em 0.55em; font-size: 0.9em; gap: 0.2em; }
-  .filtro-cat-mobile .material-symbols-outlined { font-size: 1.1em; }
 }
 
 .inv-badge-bajo {
