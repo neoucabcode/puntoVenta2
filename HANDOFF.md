@@ -91,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-28, session: UI Inventario cleanup)
+## Estado actual (última actualización: 2026-07-28, session: SKU Redesign Completo)
 
 ### UI Inventario — Limpieza (2026-07-28)
 
@@ -120,10 +120,47 @@ nunca ve los datos de "El Martillo" ni viceversa.
 - Tests: 61/61 pasan
 
 ### Pendiente Inventario
-- El toolbar ahora tiene solo: búsqueda, filtro categorías, toggle vista, "Nuevo producto"
+- El toolbar ahora tiene solo: búsqueda, filtro categorías, toggle vista, icono "Nuevo producto"
 - Las funcionalidades eliminadas (ajuste stock, historial, config SKU) se pueden re-implementar como componentes separados si se necesitan en el futuro
 
-### Refactor POS completo (2026-07-27)
+### SKU Redesign Completo (2026-07-28)
+
+**Cambio SDD:** `sku-redesign-completo` — 3 PRs encadenados implementados.
+
+#### Decisiones de negocio
+- SKU es inmutable (no cambia al cambiar categoría)
+- Path de Storage por UUID: `{empresa_id}/{producto_id}.webp`
+- Huecos se pierden (secuencia crece sin reutilizar)
+- Feedback en tiempo real mientras tipea SKU (debounce 300ms)
+- Dropdown de productos similares al escribir
+- Solo admin puede editar SKU, con confirmación fuerte
+- Exportación completa de catálogo (ZIP con JSON + imágenes)
+- Importación vía drag & drop
+
+#### PR 1: Storage UUID + SKU Inmutable
+- `lib/productos.ts` — path cambia de `{sku}.webp` a `{producto_id}.webp`
+- `components/SkuConfirmDialog.tsx` — diálogo de confirmación de 2 pasos
+- `lib/sku.ts` — función `verificarSkuDisponible`
+- Tests: 15 nuevos
+
+#### PR 2: Feedback Tiempo Real
+- `hooks/useSkuDisponibilidad.ts` — hook debounced (300ms)
+- `components/SkuAvailabilityIndicator.tsx` — spinner + ✅/❌
+- `components/SkuSimilarDropdown.tsx` — dropdown de similares
+- Tests: 20 nuevos
+
+#### PR 3: Export/Import Catálogo
+- `lib/catalogo.ts` — `exportarCatalogo` + `importarCatalogo` (JSZip)
+- `components/CatalogImportModal.tsx` — drag & drop modal
+- `pages/InventarioPage.tsx` — botones exportar/importar (admin-gated)
+- `supabase/patch_13_backfill_image_paths.sql` — script de migración
+- Tests: 30 nuevos
+
+#### Verificación
+- TypeScript: 0 errores
+- Tests: 126/126 pasan (61 originales + 65 nuevos)
+
+### Pendiente conocido
 
 ### Refactor POS completo (2026-07-27)
 

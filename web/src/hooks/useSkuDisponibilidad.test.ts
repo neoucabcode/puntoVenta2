@@ -73,7 +73,7 @@ describe('useSkuDisponibilidad', () => {
 
   it('resetea debounce al nuevo input', async () => {
     vi.mocked(verificarSkuDisponible).mockResolvedValue(true)
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ sku }) => useSkuDisponibilidad(sku, 'emp1'),
       { initialProps: { sku: 'FER-' } }
     )

@@ -336,8 +336,6 @@ describe('importarCatalogo', () => {
 
   it('reporta errores sin hacer rollback', async () => {
     // Force first product insert to fail
-    let insertCount = 0
-    const originalInsertError = h.insertError
     h.insertError = null
 
     // We can't easily make individual inserts fail with this mock structure,

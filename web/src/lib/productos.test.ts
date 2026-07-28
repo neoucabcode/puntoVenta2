@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   calcularValuacion,
   aplicarAjusteStock,
@@ -200,7 +200,6 @@ describe('subirImagenProducto (UUID-based path)', () => {
     }
     const mockCtx = {
       drawImage: vi.fn(),
-      // @ts-expect-error — test mock
       getImageData: vi.fn(),
     }
     document.createElement = vi.fn((tag: string) => {

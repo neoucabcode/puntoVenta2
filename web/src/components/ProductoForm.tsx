@@ -58,8 +58,6 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const { esAdmin } = useUsuarioRol()
   const { skuPreview, generando: skuGenerando } = useSkuPreview(categoriaId || null)
 
-  const { disponible, verificando } = useSkuDisponibilidad(sku, empresaId)
-
   const autogenerarActivo = config?.autogenerar_activo ?? false
   const [autoGenEnabled, setAutoGenEnabled] = useState(autogenerarActivo)
   const [similares, setSimilares] = useState<
@@ -72,6 +70,8 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [skuEditable, setSkuEditable] = useState(false)
 
   const [empresaId, setEmpresaId] = useState<string | null>(null)
+
+  const { disponible, verificando } = useSkuDisponibilidad(sku, empresaId)
 
   const [similarSkus, setSimilarSkus] = useState<
     Array<{ id: string; nombre: string; sku: string; similitud: number }>

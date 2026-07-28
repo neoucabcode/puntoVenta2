@@ -1,7 +1,6 @@
 // Catalog export/import logic — JSZip-based export and import functionality.
 import JSZip from 'jszip'
 import { supabase } from './supabase'
-import { obtenerMiEmpresaId } from './empresa'
 
 export type CatalogoExport = {
   version: '1.0'
