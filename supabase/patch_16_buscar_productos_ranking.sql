@@ -1,7 +1,7 @@
 -- ----------------------------------------------------------------------------
 -- patch_16_buscar_productos_ranking.sql
--- buscar_productos — mejora de ranking: SUM() en vez de MIN(), bonus por
--- coincidencias al inicio de palabras.
+-- buscar_productos — mejora de ranking: scoring compuesto en vez de MIN().
+-- Usa LATERAL para evitar el error "materialize mode required" de PostgreSQL.
 -- SECURITY INVOKER: hereda RLS (aislamiento por empresa_id).
 -- NOTA: requiere DROP previo porque la función original tiene OUT parameters.
 -- ----------------------------------------------------------------------------
@@ -28,8 +28,6 @@ AS $$
 DECLARE
   v_search text := trim(coalesce(p_search, ''));
   v_tokens text[];
-  v_like_any text[];
-  i int;
 BEGIN
   IF v_search = '' THEN
     RETURN QUERY
@@ -52,17 +50,6 @@ BEGIN
   END IF;
 
   v_tokens := string_to_array(lower(v_search), ' ');
-  v_like_any := ARRAY[]::text[];
-  FOR i IN 1..array_length(v_tokens, 1) LOOP
-    v_like_any := v_like_any || ARRAY[
-      'nombre.ilike.' || v_tokens[i] || '%',
-      'sku.ilike.' || v_tokens[i] || '%',
-      'codigo_barras.ilike.' || v_tokens[i] || '%',
-      'nombre.ilike.%' || v_tokens[i] || '%',
-      'sku.ilike.%' || v_tokens[i] || '%',
-      'codigo_barras.ilike.%' || v_tokens[i] || '%'
-    ];
-  END LOOP;
 
   RETURN QUERY
   SELECT
@@ -72,17 +59,21 @@ BEGIN
     (CASE WHEN c.id IS NOT NULL
       THEN jsonb_build_object('id', c.id, 'nombre', c.nombre)
       ELSE NULL END)::jsonb,
-    -- Score: count word-start matches (DESC) then sum of best scores (ASC)
-    (
+    -- Score compuesto: word-start matches (DESC) + sum scores (ASC)
+    (sc.word_matches - sc.score_sum)::int AS score
+  FROM producto p
+  LEFT JOIN categoria c ON c.id = p.categoria_id
+  -- LATERAL: computa score por producto, evita materialize mode error
+  LEFT JOIN LATERAL (
+    SELECT
       (SELECT count(*) FROM unnest(v_tokens) t
         WHERE lower(p.nombre) LIKE (t || '%')
            OR EXISTS (
              SELECT 1 FROM unnest(string_to_array(lower(p.nombre), ' ')) w
              WHERE w LIKE (t || '%')
            )
-      )
-      -
-      (SELECT sum(
+      ) AS word_matches,
+      (SELECT coalesce(sum(
         CASE
           WHEN lower(p.nombre) LIKE (t || '%') THEN 0
           WHEN EXISTS (
@@ -96,10 +87,8 @@ BEGIN
                OR lower(coalesce(p.codigo_barras, '')) LIKE ('%' || t || '%') THEN 4
           ELSE 9
         END
-      ) FROM unnest(v_tokens) t)
-    )::int AS score
-  FROM producto p
-  LEFT JOIN categoria c ON c.id = p.categoria_id
+      ), 0) FROM unnest(v_tokens) t) AS score_sum
+  ) sc ON true
   WHERE p.empresa_id = p_empresa_id
     AND (NOT p_solo_activos OR p.activo)
     AND (p_categoria_id IS NULL OR p.categoria_id = p_categoria_id)
