@@ -91,7 +91,14 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-29, session: Search ranking fix)
+## Estado actual (última actualización: 2026-07-29, session: SKU edit mode fix)
+
+### ProductoForm — SKU edit mode fix (2026-07-29)
+**Problema:** Al abrir el form de edición, el campo SKU quedaba habilitado antes de que cargue la config. Además, el effect de `skuPreview` sobreescribía el SKU existente con uno nuevo.
+
+**Fix:**
+- `autoGenEnabled` ahora arranca en `false` en modo edición (antes de config load)
+- `skuPreview` effect ahora tiene guard `!esEdicion` — nunca sobreescribe SKU existente
 
 ### Buscador — Ranking mejorado (2026-07-29)
 **Problema:** El scoring usaba `MIN()` (peor match entre tokens), así que "CAP 50" y "CAP 1.5MF" obtenían el mismo score. El desempate era puramente alfabético.
@@ -382,17 +389,19 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 
 ---
 
-## Resumen sesión 2026-07-29 (Search ranking fix + SKU category prefix)
+## Resumen sesión 2026-07-29 (SKU edit mode fix + Search ranking + SKU category prefix)
 
 ### Qué hicimos
 1. **SKU category prefix** — `obtenerPreviewSku()` deriva prefijo de 3 letras del nombre de categoría cuando `codigo` es NULL
 2. **listarCategorias** — ahora incluye `codigo` en el select
 3. **patch_15** — RPC `generar_sku` con fallback de nombre + backfill de categorías existentes
-4. **patch_16** — RPC `buscar_productos` con scoring compuesto (SUM en vez de MIN, bonus por word-start matches)
+4. **patch_16** — RPC `buscar_productos` con scoring compuesto (word-start count * 10 - sum scores)
+5. **SKU edit mode fix** — `autoGenEnabled` arranca en `false` en edición + `skuPreview` guard `!esEdicion`
 
 ### Archivos modificados
 - `web/src/lib/sku.ts` — fallback de código desde nombre
 - `web/src/lib/productos.ts` — listarCategorias incluye codigo
+- `web/src/components/ProductoForm.tsx` — SKU edit mode fix
 - `supabase/patch_15_sku_categoria_fallback.sql` (NUEVO)
 - `supabase/patch_16_buscar_productos_ranking.sql` (NUEVO)
 - `HANDOFF.md` — actualizado
@@ -400,10 +409,9 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 ### Estado
 - TypeScript: 0 errores
 - Tests: 170/170 pasan (24 archivos)
-- Git: develop, 2 commits ahead (pendiente push)
+- Git: develop, 4 commits ahead (ya pusheados)
 
 ### Pendiente para próxima sesión
-- Aplicar `patch_16` en Supabase Dashboard → SQL Editor
 - Regla "SKU no editable" — validación server-side
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI
