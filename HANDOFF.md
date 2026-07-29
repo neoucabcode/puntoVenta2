@@ -91,7 +91,15 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-29, session: Config save fix + Name similarity)
+## Estado actual (última actualización: 2026-07-29, session: SKU category prefix fix)
+
+### SKU — Fallback de categoría (2026-07-29)
+**Problema:** Con plantilla `categoria_secuencial`, el SKU mostraba solo "001" en vez de "CAP-001". Las categorías no tenían `codigo` en la DB, y el RPC lanzaba excepción.
+
+**Fix:**
+- `sku.ts` — `obtenerPreviewSku()` ahora busca `codigo,nombre` y deriva de 3 letras del nombre si `codigo` es NULL
+- `productos.ts` — `listarCategorias()` ahora incluye `codigo` en el select
+- `patch_15` — RPC `generar_sku` con fallback: `UPPER(LEFT(TRIM(nombre), 3))` cuando `codigo` es NULL + backfill automático de categorías existentes
 
 ### SKU — mayúsculas forzadas (2026-07-29)
 - `ProductoForm.tsx` — input fuerza `.toUpperCase()` + `text-transform: uppercase`
@@ -361,38 +369,25 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 
 ---
 
-## Resumen sesión 2026-07-29 (Config save fix + Name similarity)
+## Resumen sesión 2026-07-29 (SKU category prefix fix)
 
 ### Qué hicimos
-1. **SKU uppercase** — forzar mayúsculas en input, RPC, y generar_sku
-2. **RPC verificar_sku_disponible** — creado en patch_14 (faltaba en la DB)
-3. **Validación de formato SKU** — `validarFormatoSku()` con regex por plantilla
-4. **Config UI rediseño** — header+tabs fusionados en 1 fila, save bar como flex child
-5. **Config save fix** — upsert en lugar de update, eliminado `actualizado_en` (columna inexistente)
-6. **Name similarity** — detección de duplicados mientras se escribe el nombre del producto
-7. **Fallback client-side** — trigram Jaccard local cuando el RPC falla
+1. **SKU category prefix** — `obtenerPreviewSku()` ahora deriva el prefijo de 3 letras del nombre de la categoría cuando `codigo` es NULL
+2. **listarCategorias** — ahora incluye `codigo` en el select
+3. **patch_15** — RPC `generar_sku` con fallback de nombre + backfill de categorías existentes
 
 ### Archivos modificados
-- `supabase/patch_14_verificar_sku_disponible.sql` (NUEVO)
-- `web/src/lib/sku.ts` — upsert, eliminado `actualizado_en`
-- `web/src/lib/sku-format.test.ts` (NUEVO — 19 tests)
-- `web/src/lib/config-save.test.ts` (NUEVO — 9 tests)
-- `web/src/lib/mock-data.ts` — eliminado `actualizado_en` del mock
-- `web/src/components/ProductoForm.tsx` — fallback client-side similarity, dropdown nombre
-- `web/src/pages/ConfiguracionPage.tsx` — save sin null guard, import obtenerMiEmpresaId
-- `web/src/pages/ConfiguracionPage.test.tsx` — actualizado
-- `web/src/hooks/useEmpresaConfig.ts` — agregado refetch
-- `web/src/index.css` — save bar como flex child, CSS optimizado
+- `web/src/lib/sku.ts` — fallback de código desde nombre
+- `web/src/lib/productos.ts` — listarCategorias incluye codigo
+- `supabase/patch_15_sku_categoria_fallback.sql` (NUEVO)
 - `HANDOFF.md` — actualizado
 
 ### Estado
 - TypeScript: 0 errores
 - Tests: 170/170 pasan (24 archivos)
-- Git: develop, 7 commits ahead, working tree con cambios sin stagear
+- Git: develop, pendiente commit + push
 
 ### Pendiente para próxima sesión
-- Aplicar `patch_14` en Supabase Dashboard (verificar_sku_disponible)
-- Commit de los cambios de esta sesión
 - Regla "SKU no editable" — validación server-side
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI

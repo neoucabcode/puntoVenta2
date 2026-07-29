@@ -106,14 +106,14 @@ export async function obtenerPreviewSku(
     return `${config.prefijo_manual}-${padded}`
   }
   if (config.plantilla === 'categoria_secuencial' && categoriaId) {
-    // Obtener código de categoría
     const { data: catData } = await supabase
       .from('categoria')
-      .select('codigo')
+      .select('codigo,nombre')
       .eq('id', categoriaId)
       .eq('empresa_id', empresaId)
       .single()
     const catCode = (catData?.codigo as string | null)?.toUpperCase()
+      ?? (catData?.nombre as string | null)?.slice(0, 3).toUpperCase()
     if (!catCode) return null
     return `${catCode}-${padded}`
   }
