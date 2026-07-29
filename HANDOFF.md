@@ -103,6 +103,8 @@ nunca ve los datos de "El Martillo" ni viceversa.
 
 Ejemplo: "trans met" → "TRANSMISION METALICA" (2 word-start matches) aparece antes que "TRANSMISION 10 DIENTES" (1 word-start + 1 substring).
 
+**Error corregido:** `RETURNS SETOF record` en vez de `RETURNS TABLE(...)` causaba "materialize mode required". La firma debe ser idéntica a la deployada.
+
 ### SKU — Fallback de categoría (2026-07-29)
 **Problema:** Con plantilla `categoria_secuencial`, el SKU mostraba solo "001" en vez de "CAP-001". Las categorías no tenían `codigo` en la DB, y el RPC lanzaba excepción.
 
@@ -376,6 +378,7 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 - **Tasa BCV default:** siempre initialize con un valor razonable (36.50), nunca con 1
 - **Breakpoints responsivos:** 900px (tablet/drawer) / 600px (phone/2-col)
 - **Floating pill button:** mejor que bottom snippet para acceso rápido al carrito en móvil
+- **RETURNS TABLE vs RETURNS SETOF record:** al hacer DROP+CREATE de un RPC existente, la firma (RETURNS TABLE con columnas explícitas) debe ser IDÉNTICA. Cambiar a SETOF record rompe el mapeo de PostgREST y causa "materialize mode required".
 
 ---
 
