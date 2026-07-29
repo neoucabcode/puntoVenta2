@@ -554,7 +554,6 @@ type MockSkuConfig = {
   prefijo_manual: string | null
   umbral_similitud: number
   creado_en: string
-  actualizado_en: string
 }
 
 const SKU_CONFIG_KEY = 'pv-local-sku-config-v1'
@@ -636,12 +635,10 @@ export async function actualizarConfigSkuMock(
     prefijo_manual: null,
     umbral_similitud: 0.3,
     creado_en: new Date().toISOString(),
-    actualizado_en: new Date().toISOString(),
   }
   persistMockSkuConfig(empresaId, {
     ...existing,
     ...config,
-    actualizado_en: new Date().toISOString(),
   })
 }
 

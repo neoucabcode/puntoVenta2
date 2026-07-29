@@ -2115,6 +2115,15 @@ button { font-family: var(--font); }
 .sku-availability-icon { font-size: 1rem; }
 .sku-availability-text { font-size: 0.85rem; }
 
+.sku-format-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--warn, #f59e0b);
+  margin-left: 0.5rem;
+}
+
 /* ---------- SkuSimilarDropdown ---------- */
 .sku-similar-dropdown {
   position: absolute;
@@ -2153,6 +2162,58 @@ button { font-family: var(--font); }
 }
 .sku-similar-similitud {
   font-size: 0.75rem;
+}
+
+/* ---------- Nombre similar dropdown (while typing) ---------- */
+.nombre-similares-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 2px;
+}
+.nombre-similares-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--warn, #f59e0b);
+  border-bottom: 1px solid var(--border);
+}
+.nombre-similares-title .material-symbols-outlined {
+  font-size: 0.9rem;
+}
+.nombre-similar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+.nombre-similar-item:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.nombre-similar-name {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nombre-similar-sku {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* ---------- DuplicadoAlert ---------- */
@@ -2431,72 +2492,462 @@ button { font-family: var(--font); }
   }
 }
 
-/* ─── Configuración page ─── */
-.config-page { padding: var(--sp-4); max-width: 640px; margin: 0 auto; }
-.config-page h1 { margin-bottom: var(--sp-3); font-size: var(--fs-xl); }
+/* ═══════════════════════════════════════════════════════════════════
+   Configuración — admin settings page
+   ═══════════════════════════════════════════════════════════════════ */
 
-.config-tabs { display: flex; gap: var(--sp-1); margin-bottom: var(--sp-3); }
-.config-tab {
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  font-size: var(--fs-sm);
-  transition: background 0.15s, color 0.15s;
+/* ── Page shell ── */
+.config-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
 }
-.config-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.config-tab:hover:not(.active) { background: var(--surface-3); }
 
-.config-section {
+/* ── Topbar: title + tabs in one compact row ── */
+.config-topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-5);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+  min-height: 40px;
+}
+.config-title {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Tabs (inline in topbar) ── */
+.config-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin-left: auto;
+}
+.config-tabs::-webkit-scrollbar { display: none; }
+
+.config-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: var(--sp-1) var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+  min-height: 32px;
+}
+.config-tab:hover:not(.active) {
+  color: var(--text-secondary);
   background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--sp-3);
+}
+.config-tab.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.config-tab-icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.config-tab-label {
+  line-height: 1;
+}
+
+/* ── Scrollable content ── */
+.config-content {
+  flex: 1 1 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--sp-2) var(--sp-5);
+  scroll-behavior: smooth;
+}
+
+/* ── Section ── */
+.config-section {
+  max-width: 960px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
 }
 
+.config-section-header {
+  margin-bottom: 0;
+}
+.config-section-header h2 {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+/* ── Cards ── */
+.config-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.config-card-header {
+  padding: var(--sp-2) var(--sp-4) 0;
+}
+.config-card-header h3 {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.config-card-body {
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+}
+
+/* ── Fields grid ── */
+.config-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-4);
+}
+
+/* ── Field ── */
 .config-field {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
+}
+.config-field-label {
   font-size: var(--fs-sm);
+  font-weight: 500;
   color: var(--text-secondary);
+}
+.config-field-label strong {
+  color: var(--accent);
+  font-weight: 600;
 }
 .config-field input,
 .config-field select {
-  padding: var(--sp-1) var(--sp-2);
+  padding: 0.625rem var(--sp-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
+  min-height: 44px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.config-field input:hover,
+.config-field select:hover {
+  border-color: var(--border-strong);
+}
+.config-field input:focus,
+.config-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.config-field select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b70' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.25rem;
+}
+.config-field input[type="range"] {
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--accent);
+  min-height: 0;
+  cursor: pointer;
+}
+.config-field-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
+/* ── Toggle row ── */
 .config-toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-1) 0;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  cursor: pointer;
+  min-height: 44px;
+}
+.config-toggle-row + .config-toggle-row {
+  border-top: 1px solid var(--border);
+}
+.config-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.config-toggle-label {
   font-size: var(--fs-sm);
-  color: var(--text-secondary);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.config-toggle-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Custom switch ── */
+.config-switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.config-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.config-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-3);
+  border-radius: 13px;
+  transition: background 0.2s;
   cursor: pointer;
 }
-.config-toggle-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+.config-switch-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.config-switch.on .config-switch-slider {
+  background: var(--accent);
+}
+.config-switch.on .config-switch-slider::before {
+  transform: translateX(22px);
+}
+.config-switch input:focus-visible + .config-switch-slider {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 
-.config-save-row {
+/* ── Modules grid ── */
+.config-modulos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-3);
+}
+.config-modulo-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-height: 80px;
+}
+.config-modulo-card:hover {
+  border-color: var(--border-strong);
+}
+.config-modulo-card.enabled {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+.config-modulo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.config-modulo-name {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.config-modulo-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Save bar (flex child, always visible at bottom) ── */
+.config-save-bar {
+  flex-shrink: 0;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  padding: var(--sp-1) var(--sp-5);
+}
+.config-save-inner {
+  max-width: 960px;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--border);
-  margin-top: var(--sp-1);
+  gap: var(--sp-3);
 }
 
-.config-saved { color: var(--ok); font-size: var(--fs-sm); animation: fadeIn 0.3s; }
+/* ── Saved state ── */
+.config-saved {
+  color: var(--ok);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  animation: fadeIn 0.3s;
+}
+
+/* ── Error ── */
+.config-error {
+  color: var(--off);
+  font-size: var(--fs-sm);
+  background: var(--off-soft);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  margin: 0;
+}
+
+/* ── Primary button ── */
+.config-btn-primary {
+  padding: 0.625rem var(--sp-5);
+  border-radius: var(--radius);
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s, transform 0.1s;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.config-btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.config-btn-primary:active {
+  transform: translateY(0);
+}
+.config-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Loading state ── */
+.config-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  height: 100dvh;
+  height: 100vh;
+}
+.config-loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ═══ Responsive ═══ */
+
+/* Tablet & below */
+@media (max-width: 768px) {
+  .config-topbar {
+    padding: var(--sp-1) var(--sp-3);
+  }
+  .config-content {
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .config-section {
+    gap: var(--sp-2);
+  }
+  .config-card-header {
+    padding: var(--sp-2) var(--sp-3) 0;
+  }
+  .config-card-body {
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .config-save-bar {
+    padding: var(--sp-1) var(--sp-3);
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .config-topbar {
+    padding: var(--sp-1) var(--sp-2);
+    flex-wrap: wrap;
+  }
+  .config-title {
+    font-size: var(--fs-xs);
+  }
+  .config-tabs {
+    gap: 2px;
+  }
+  .config-tab {
+    padding: var(--sp-1) var(--sp-1);
+    font-size: 0.7rem;
+  }
+  .config-tab-icon {
+    font-size: 0.95rem;
+  }
+  .config-content {
+    padding: var(--sp-1) var(--sp-2);
+  }
+  .config-fields-grid {
+    grid-template-columns: 1fr;
+  }
+  .config-modulos-grid {
+    grid-template-columns: 1fr;
+  }
+  .config-modulo-card {
+    padding: var(--sp-2);
+  }
+  .config-save-bar {
+    padding: var(--sp-1) var(--sp-2);
+  }
+  .config-btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .config-save-inner {
+    flex-direction: column-reverse;
+    gap: var(--sp-1);
+  }
+}

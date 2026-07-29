@@ -1,10 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { obtenerConfigSku, type EmpresaConfigSku } from '../lib/sku'
 import { obtenerMiEmpresaId } from '../lib/empresa'
 
 export function useEmpresaConfig() {
   const [config, setConfig] = useState<EmpresaConfigSku | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const fetchConfig = useCallback(async () => {
+    setLoading(true)
+    try {
+      const empresaId = await obtenerMiEmpresaId()
+      if (!empresaId) {
+        setConfig(null)
+        return
+      }
+      const c = await obtenerConfigSku(empresaId)
+      setConfig(c)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -24,5 +39,5 @@ export function useEmpresaConfig() {
     }
   }, [])
 
-  return { config, loading }
+  return { config, loading, refetch: fetchConfig }
 }

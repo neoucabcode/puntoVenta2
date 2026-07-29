@@ -17,7 +17,6 @@ export type EmpresaConfigSku = {
   prefijo_manual: string | null
   umbral_similitud: number
   creado_en: string
-  actualizado_en: string
 }
 
 // Convierte el string que PostgREST devuelve para numeric en número.
@@ -156,14 +155,61 @@ export async function verificarSkuDisponible(
 
   const { data, error } = await supabase.rpc('verificar_sku_disponible', {
     p_empresa_id: empresaId,
-    p_sku: sku,
+    p_sku: sku.trim().toUpperCase(),
   })
   if (error) throw error
   return Boolean(data)
 }
 
-// Actualiza la configuración de SKU de la empresa (solo admin).
-// Hace un merge parcial: solo actualiza los campos provistos.
+// Valida el formato de un SKU manual contra la plantilla configurada.
+// Devuelve null si es válido, o un string con el mensaje de error.
+// Solo aplica cuando auto-gen está activo y el usuario edita manualmente.
+export function validarFormatoSku(
+  sku: string,
+  config: EmpresaConfigSku | null,
+  categoriaCodigo?: string | null
+): string | null {
+  if (!sku || !config) return null
+
+  const trimmed = sku.trim()
+  if (!trimmed) return null
+
+  const longitud = config.longitud_secuencial
+  const seqPattern = `\\d{${longitud}}`
+
+  let expected: RegExp
+  let ejemplo: string
+
+  switch (config.plantilla) {
+    case 'categoria_secuencial': {
+      const catCode = categoriaCodigo?.toUpperCase() ?? '[COD]'
+      expected = new RegExp(`^[A-Z]{2,5}-${seqPattern}$`)
+      ejemplo = `${catCode}-001`
+      break
+    }
+    case 'prefijo_fijo_secuencial': {
+      const prefix = config.prefijo_manual?.toUpperCase() ?? '[PREF]'
+      expected = new RegExp(`^[A-Z]{1,10}-${seqPattern}$`)
+      ejemplo = `${prefix}-001`
+      break
+    }
+    case 'solo_secuencial': {
+      expected = new RegExp(`^${seqPattern}$`)
+      ejemplo = '001'
+      break
+    }
+    default:
+      return null
+  }
+
+  if (!expected.test(trimmed.toUpperCase())) {
+    return `Formato esperado: ${ejemplo} (${longitud} dígitos)`
+  }
+  return null
+}
+
+// Upsert la configuración de SKU de la empresa (solo admin).
+// Si no existe fila, la crea. Si existe, la actualiza.
 export async function actualizarConfigSku(
   empresaId: string,
   config: Partial<EmpresaConfigSku>
@@ -173,19 +219,18 @@ export async function actualizarConfigSku(
     return
   }
 
+  const payload: Record<string, unknown> = { empresa_id: empresaId }
+  if (config.autogenerar_activo !== undefined) payload.autogenerar_activo = config.autogenerar_activo
+  if (config.plantilla !== undefined) payload.plantilla = config.plantilla
+  if (config.usa_categoria !== undefined) payload.usa_categoria = config.usa_categoria
+  if (config.modo_contador !== undefined) payload.modo_contador = config.modo_contador
+  if (config.longitud_secuencial !== undefined) payload.longitud_secuencial = config.longitud_secuencial
+  if (config.prefijo_manual !== undefined) payload.prefijo_manual = config.prefijo_manual
+  if (config.umbral_similitud !== undefined) payload.umbral_similitud = config.umbral_similitud
+
   const { error } = await supabase
     .from('empresa_configuracion_sku')
-    .update({
-      ...(config.autogenerar_activo !== undefined && { autogenerar_activo: config.autogenerar_activo }),
-      ...(config.plantilla !== undefined && { plantilla: config.plantilla }),
-      ...(config.usa_categoria !== undefined && { usa_categoria: config.usa_categoria }),
-      ...(config.modo_contador !== undefined && { modo_contador: config.modo_contador }),
-      ...(config.longitud_secuencial !== undefined && { longitud_secuencial: config.longitud_secuencial }),
-      ...(config.prefijo_manual !== undefined && { prefijo_manual: config.prefijo_manual }),
-      ...(config.umbral_similitud !== undefined && { umbral_similitud: config.umbral_similitud }),
-      actualizado_en: new Date().toISOString(),
-    })
-    .eq('empresa_id', empresaId)
+    .upsert(payload, { onConflict: 'empresa_id' })
   if (error) throw error
 }
 
@@ -202,6 +247,5 @@ function mapRowToConfig(row: Record<string, unknown>): EmpresaConfigSku {
     prefijo_manual: (row.prefijo_manual as string) ?? null,
     umbral_similitud: parseNumeric(row.umbral_similitud, 'umbral_similitud'),
     creado_en: row.creado_en as string,
-    actualizado_en: row.actualizado_en as string,
   }
 }

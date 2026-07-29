@@ -91,7 +91,54 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-28, session: SKU Redesign + Configuración Empresa)
+## Estado actual (última actualización: 2026-07-29, session: Config save fix + Name similarity)
+
+### SKU — mayúsculas forzadas (2026-07-29)
+- `ProductoForm.tsx` — input fuerza `.toUpperCase()` + `text-transform: uppercase`
+- `sku.ts` — `verificarSkuDisponible()` normaliza a `.toUpperCase()` antes del RPC
+- `patch_14` — `verificar_sku_disponible` compara con `LOWER()` (case-insensitive); `generar_sku` agrega `UPPER()` a categoría y prefijo
+
+### Configuración — Save fix + Space optimization (2026-07-29)
+**Problemas resueltos:**
+- Save button no funcionaba: `position: fixed` dentro de `overflow: hidden` — el contenido lo cubría
+- `handleSaveSku` retornaba silenciosamente si `config` era null (empresa sin fila de config)
+- `actualizarConfigSku` escribía `actualizado_en` (columna inexistente en DB) → Supabase 400
+- Header + tabs ocupaban 2 filas (~94px) — fusionados en 1 fila compacta (~40px)
+- Section descriptions redundantes eliminadas
+
+**Cambios:**
+- Save bar: de `position: fixed` a **flex child** del layout — siempre visible
+- `actualizarConfigSku`: de UPDATE a **upsert** con `onConflict: 'empresa_id'`
+- `handleSaveSku`: obtiene `empresaId` de config o `obtenerMiEmpresaId()` (no más null guard)
+- `useEmpresaConfig`: expone `refetch` para recargar después de save
+- CSS: header+tabs fusionados, section headers reducidos, content padding optimizado
+
+### Detección de duplicados por nombre (2026-07-29)
+**Feature nueva:** Al escribir en "Nombre" del producto, se busca debounceada (400ms) productos similares.
+
+**Implementación:**
+- useEffect en `ProductoForm` que llama `buscarProductosSimilares` (RPC trigram) al cambiar el nombre
+- **Fallback client-side**: si el RPC falla, usa `listarProductos` + trigram Jaccard local
+- Dropdown inline debajo del input muestra: nombre, SKU, % similitud
+- Filtra por umbral de config y excluye producto actual en modo edición
+- `calcularSimilitud()` — Jaccard en trigrams de 3 chars (extraída para testabilidad)
+
+**Archivos modificados:**
+| Archivo | Cambio |
+|---------|--------|
+| `pages/ConfiguracionPage.tsx` | Header+tabs fusionados, save sin null guard, import obtenerMiEmpresaId |
+| `pages/ConfiguracionPage.test.tsx` | Tests actualizados |
+| `index.css` | Save bar como flex child, CSS optimizado (~300 líneas reescritas) |
+| `lib/sku.ts` | upsert en actualizarConfigSku, eliminado actualizado_en del tipo |
+| `lib/sku-format.test.ts` | Eliminado actualizado_en del mock |
+| `lib/mock-data.ts` | Eliminado actualizado_en del tipo mock |
+| `hooks/useEmpresaConfig.ts` | Agregado refetch |
+| `components/ProductoForm.tsx` | Fallback client-side similarity, calcularSimilitud, dropdown nombre |
+| `lib/config-save.test.ts` | **Nuevo** — tests de calcularSimilitud + upsert |
+
+### Verificación
+- TypeScript: 0 errores
+- Tests: 170/170 pasan (161 originales + 9 nuevos)
 
 ### UI Inventario — Limpieza (2026-07-28)
 
@@ -262,18 +309,18 @@ nunca ve los datos de "El Martillo" ni viceversa.
 
 ## Pendiente decidido (NO hecho aún)
 1. **Regla "SKU no editable en la app"** — el código (`sku`) debe ser solo lectura para usuarios
-   normales; solo admin con diálogo de confirmación fuerte puede editarlo. Es trabajo de
-   `ProductoForm.tsx` + capa `lib/productos.ts` (guarda de negocio, no confiar solo en frontend).
-   El Excel es la fuente de códigos; la app no debe dejar editarlos a la ligera.
+   normales; solo admin con diálogo de confirmación fuerte puede editarlo. El frontend ya tiene
+   `validarFormatoSku()` y `SkuConfirmDialog`, pero falta validación server-side.
 2. **17 productos sin imagen** — el usuario las sube desde Inventario → ProductoForm.
 3. **Slices 3-6 del rediseño UI** — pagos combinados, devoluciones, presupuestos, hardware.
 4. **Consistencia visual** — Login/Registro/Venta con el mismo estilo del catálogo.
 5. **Aplicar SQL** `patch_08_ordenar_productos_rpc.sql` en Supabase Dashboard → SQL Editor.
+6. **Aplicar SQL** `patch_14_verificar_sku_disponible.sql` en Supabase Dashboard → SQL Editor.
 
-## Bugs abiertos (2026-07-24 verificado)
+## Bugs abiertos (2026-07-29 verificado)
 1. ~~**ImageEditor crash**~~ — **RESUELTO** (2026-07-23). Causa raíz: `aspect={NaN}` en el Cropper original.
 2. ~~**Storage path 400 / RLS policy**~~ — **RESUELTO** (2026-07-23). Causa raíz: `mi_empresa_id()` no tenía `search_path` fijo.
-3. **SKU editable sin restricción** — el campo SKU permite ediciones fáciles y no previene duplicados. Falta implementar la regla "SKU no editable para vendedores" con validación backend.
+3. **SKU editable sin restricción backend** — El frontend ahora valida formato y muestra warnings, pero falta validación server-side. `verificar_sku_disponible` RPC creado (patch_14) pero aún no aplicado en prod.
 4. **Botón de pegar (portapapeles) no visible** — el botón de pegar imagen desde portapapeles no aparece en el ImageEditor. CSS corregido pero aún no visible en producción.
 5. **Fuga Storage multi-tenant** — `productos_public_read` expone TODAS las imágenes a CUALQUIER usuario autenticado.
 
@@ -290,6 +337,7 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 3. Confirmar con el usuario el foco (no asumir).
 4. Para operar contra Supabase: el usuario define las env vars vía `supabase/.env.local`
    (ya existe, ignorado por git). El asistente NO corre comandos con la secret key.
+5. **Engram:** si el MCP server está disponible, guardar resumen de sesión con `mem_session_summary`.
 
 ## Notas de método
 - El asistente actúa como ORCHESTRATOR: delega implementación a sub-agents; el usuario corre los
@@ -310,3 +358,42 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 - **Tasa BCV default:** siempre initialize con un valor razonable (36.50), nunca con 1
 - **Breakpoints responsivos:** 900px (tablet/drawer) / 600px (phone/2-col)
 - **Floating pill button:** mejor que bottom snippet para acceso rápido al carrito en móvil
+
+---
+
+## Resumen sesión 2026-07-29 (Config save fix + Name similarity)
+
+### Qué hicimos
+1. **SKU uppercase** — forzar mayúsculas en input, RPC, y generar_sku
+2. **RPC verificar_sku_disponible** — creado en patch_14 (faltaba en la DB)
+3. **Validación de formato SKU** — `validarFormatoSku()` con regex por plantilla
+4. **Config UI rediseño** — header+tabs fusionados en 1 fila, save bar como flex child
+5. **Config save fix** — upsert en lugar de update, eliminado `actualizado_en` (columna inexistente)
+6. **Name similarity** — detección de duplicados mientras se escribe el nombre del producto
+7. **Fallback client-side** — trigram Jaccard local cuando el RPC falla
+
+### Archivos modificados
+- `supabase/patch_14_verificar_sku_disponible.sql` (NUEVO)
+- `web/src/lib/sku.ts` — upsert, eliminado `actualizado_en`
+- `web/src/lib/sku-format.test.ts` (NUEVO — 19 tests)
+- `web/src/lib/config-save.test.ts` (NUEVO — 9 tests)
+- `web/src/lib/mock-data.ts` — eliminado `actualizado_en` del mock
+- `web/src/components/ProductoForm.tsx` — fallback client-side similarity, dropdown nombre
+- `web/src/pages/ConfiguracionPage.tsx` — save sin null guard, import obtenerMiEmpresaId
+- `web/src/pages/ConfiguracionPage.test.tsx` — actualizado
+- `web/src/hooks/useEmpresaConfig.ts` — agregado refetch
+- `web/src/index.css` — save bar como flex child, CSS optimizado
+- `HANDOFF.md` — actualizado
+
+### Estado
+- TypeScript: 0 errores
+- Tests: 170/170 pasan (24 archivos)
+- Git: develop, 7 commits ahead, working tree con cambios sin stagear
+
+### Pendiente para próxima sesión
+- Aplicar `patch_14` en Supabase Dashboard (verificar_sku_disponible)
+- Commit de los cambios de esta sesión
+- Regla "SKU no editable" — validación server-side
+- 17 productos sin imagen
+- Slices 3-6 del rediseño UI
+- Verificar en prod que el upsert de config funciona (puede que la empresa no tenga fila de config)

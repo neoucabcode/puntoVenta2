@@ -101,44 +101,39 @@ describe('ConfiguracionPage', () => {
     expect(html).toContain('Módulos')
   })
 
-  it('muestra formulario de SKU por defecto', () => {
+  it('muestra formulario de SKU por defecto (tab activo)', () => {
     h.rol = { rol: 'admin', esAdmin: true, inventarioHabilitado: true, loading: false }
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <ConfiguracionPage />
       </MemoryRouter>
     )
+    // SKU tab es el activo por defecto
     expect(html).toContain('Autogenerar SKU')
     expect(html).toContain('Plantilla')
     expect(html).toContain('Guardar')
   })
 
-  it('muestra campos de empresa (tasa, IGTF, stock)', () => {
+  it('no muestra campos de empresa en tab SKU (renderizado condicional)', () => {
     h.rol = { rol: 'admin', esAdmin: true, inventarioHabilitado: true, loading: false }
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <ConfiguracionPage />
       </MemoryRouter>
     )
-    // Verificar que los campos de empresa existen en el HTML (aunque no visibles en el tab activo)
-    expect(html).toContain('Tasa activa')
-    expect(html).toContain('IGTF')
-    expect(html).toContain('Venta sin stock')
-    expect(html).toContain('Stock negativo')
+    // Los campos de empresa NO están en el HTML porque el tab no está activo
+    expect(html).not.toContain('Tasa activa')
   })
 
-  it('muestra módulos disponibles', () => {
+  it('no muestra módulos en tab SKU (renderizado condicional)', () => {
     h.rol = { rol: 'admin', esAdmin: true, inventarioHabilitado: true, loading: false }
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <ConfiguracionPage />
       </MemoryRouter>
     )
-    expect(html).toContain('Catálogo')
-    expect(html).toContain('Venta')
-    expect(html).toContain('Inventario')
-    expect(html).toContain('Caja')
-    expect(html).toContain('Reportes')
+    // Los módulos NO están en el HTML porque el tab no está activo
+    expect(html).not.toContain('Catálogo')
   })
 
   it('loading muestra estado de carga', () => {

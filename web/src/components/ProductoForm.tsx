@@ -11,7 +11,8 @@ import {
   type ProductoInput,
 } from '../lib/productos'
 import { obtenerMiEmpresaId } from '../lib/empresa'
-import { generarSku, buscarProductosSimilares } from '../lib/sku'
+import { generarSku, buscarProductosSimilares, validarFormatoSku } from '../lib/sku'
+import { listarProductos } from '../lib/productos'
 import { useEmpresaConfig } from '../hooks/useEmpresaConfig'
 import { useSkuPreview } from '../hooks/useSkuPreview'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
@@ -24,6 +25,21 @@ import { useSkuDisponibilidad } from '../hooks/useSkuDisponibilidad'
 import { SkuAvailabilityIndicator } from './SkuAvailabilityIndicator'
 import { SkuSimilarDropdown } from './SkuSimilarDropdown'
 import { validarImagen } from '../lib/imageUtils'
+
+// Simple client-side string similarity (Jaccard on word trigrams)
+// Used as fallback when the RPC buscar_productos_similares is unavailable
+function calcularSimilitud(a: string, b: string): number {
+  if (!a || !b) return 0
+  if (a === b) return 1
+  const trigramsA = new Set<string>()
+  const trigramsB = new Set<string>()
+  for (let i = 0; i <= a.length - 3; i++) trigramsA.add(a.slice(i, i + 3))
+  for (let i = 0; i <= b.length - 3; i++) trigramsB.add(b.slice(i, i + 3))
+  if (trigramsA.size === 0 || trigramsB.size === 0) return 0
+  let intersection = 0
+  for (const t of trigramsA) if (trigramsB.has(t)) intersection++
+  return intersection / (trigramsA.size + trigramsB.size - intersection)
+}
 
 type Props = {
   producto: Producto | null
@@ -76,6 +92,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [similarSkus, setSimilarSkus] = useState<
     Array<{ id: string; nombre: string; sku: string; similitud: number }>
   >([])
+  const [skuFormatWarning, setSkuFormatWarning] = useState<string | null>(null)
+  const [nombreSimilares, setNombreSimilares] = useState<
+    Array<{ id: string; nombre: string; sku: string; similitud: number }>
+  >([])
 
   // When config loads, sync admin toggle default
   useEffect(() => {
@@ -110,12 +130,77 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     }
   }, [sku, empresaId])
 
+  // Fetch similar products when name changes (debounced) — duplicate detection while typing
+  useEffect(() => {
+    if (!nombre.trim() || !empresaId || nombre.trim().length < 3) {
+      setNombreSimilares([])
+      return
+    }
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        // Try RPC first (trigram search)
+        let encontrados: Array<{ id: string; nombre: string; sku: string; similitud: number }> = []
+        try {
+          encontrados = await buscarProductosSimilares(
+            empresaId,
+            nombre.trim(),
+            config?.umbral_similitud ?? 0.3
+          )
+        } catch (rpcErr) {
+          // RPC failed (pg_trgm not installed, function missing, etc.)
+          // Fallback: client-side search using listarProductos
+          console.warn('[ProductoForm] RPC buscar_productos_similares failed, using client-side fallback:', rpcErr)
+          try {
+            const { items } = await listarProductos({ soloActivos: true, pageSize: 500 })
+            const texto = nombre.trim().toLowerCase()
+            encontrados = items
+              .map((p) => ({
+                id: p.id,
+                nombre: p.nombre,
+                sku: p.sku ?? '',
+                similitud: calcularSimilitud(texto, p.nombre.toLowerCase()),
+              }))
+              .filter((p) => p.similitud > (config?.umbral_similitud ?? 0.3))
+              .sort((a, b) => b.similitud - a.similitud)
+              .slice(0, 10)
+          } catch {
+            // Both RPC and fallback failed
+          }
+        }
+        // Filter out the current product in edit mode
+        const filtrados = esEdicion
+          ? encontrados.filter((s) => s.sku !== producto?.sku)
+          : encontrados
+        if (!cancelled) setNombreSimilares(filtrados)
+      } catch {
+        if (!cancelled) setNombreSimilares([])
+      }
+    }, 400)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [nombre, empresaId, config?.umbral_similitud, esEdicion, producto?.sku])
+
   // Sync SKU preview into state when auto-gen is active
   useEffect(() => {
     if (autoGenEnabled && skuPreview) {
       setSku(skuPreview)
     }
   }, [autoGenEnabled, skuPreview])
+
+  // Validate SKU format when manual input is used
+  useEffect(() => {
+    if (!sku.trim() || autoGenEnabled) {
+      setSkuFormatWarning(null)
+      return
+    }
+    const warning = validarFormatoSku(sku, config ?? null)
+    setSkuFormatWarning(warning)
+  }, [sku, config, autoGenEnabled])
 
   // Listener para pegar imagen desde el portapapeles (Ctrl+V)
   useEffect(() => {
@@ -312,6 +397,13 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
         }
       }
 
+      // Guard: si auto-gen estaba activo pero el RPC devolvió null, informar
+      if (autoGenEnabled && !skuValue) {
+        setError('No se pudo generar el SKU automáticamente. Verificá la configuración de SKU en Configuración.')
+        setSaving(false)
+        return
+      }
+
       const base: ProductoInput = {
         nombre: nombre.trim(),
         sku: skuValue,
@@ -482,9 +574,24 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             <button type="button" onClick={onClose} aria-label="Cerrar">×</button>
           </header>
           <form onSubmit={onSubmit} className="form-grid">
-            <label className="span-2">
+            <label className="span-2" style={{ position: 'relative' }}>
               Nombre*
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+              {nombreSimilares.length > 0 && nombre.trim().length >= 3 && (
+                <div className="nombre-similares-dropdown">
+                  <span className="nombre-similares-title">
+                    <span className="material-symbols-outlined">warning</span>
+                    Productos similares encontrados:
+                  </span>
+                  {nombreSimilares.map((p) => (
+                    <div key={p.id} className="nombre-similar-item">
+                      <span className="nombre-similar-name">{p.nombre}</span>
+                      <span className="nombre-similar-sku">{p.sku || '—'}</span>
+                      <span className="badge warn">{Math.round(p.similitud * 100)}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </label>
             <div style={{ gridColumn: 'span 2', position: 'relative' }}>
               <label>
@@ -495,12 +602,18 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                     : 'SKU'}
                 <input
                   value={sku}
-                  onChange={(e) => setSku(e.target.value)}
+                  onChange={(e) => setSku(e.target.value.toUpperCase())}
                   disabled={skuReadOnly}
                   readOnly={skuReadOnly}
+                  style={{ textTransform: 'uppercase' }}
                 />
               </label>
               <SkuAvailabilityIndicator verificando={verificando} disponible={disponible} />
+              {skuFormatWarning && (
+                <span className="sku-format-warning" role="alert">
+                  ⚠️ {skuFormatWarning}
+                </span>
+              )}
               <SkuSimilarDropdown
                 productos={similarSkus}
                 onSelect={(producto) => setSku(producto.sku)}
