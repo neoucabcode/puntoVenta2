@@ -75,7 +75,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const { skuPreview, generando: skuGenerando } = useSkuPreview(categoriaId || null)
 
   const autogenerarActivo = config?.autogenerar_activo ?? false
-  const [autoGenEnabled, setAutoGenEnabled] = useState(autogenerarActivo)
+  const [autoGenEnabled, setAutoGenEnabled] = useState(esEdicion ? false : autogenerarActivo)
   const [similares, setSimilares] = useState<
     Array<{ nombre: string; sku: string; similitud: number }>
   >([])
@@ -187,10 +187,10 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
 
   // Sync SKU preview into state when auto-gen is active
   useEffect(() => {
-    if (autoGenEnabled && skuPreview) {
+    if (autoGenEnabled && skuPreview && !esEdicion) {
       setSku(skuPreview)
     }
-  }, [autoGenEnabled, skuPreview])
+  }, [autoGenEnabled, skuPreview, esEdicion])
 
   // Validate SKU format when manual input is used
   useEffect(() => {
