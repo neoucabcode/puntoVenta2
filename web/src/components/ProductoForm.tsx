@@ -85,6 +85,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
   const [showSkuEditConfirm, setShowSkuEditConfirm] = useState(false)
   const [skuEditable, setSkuEditable] = useState(false)
 
+  const [campoActivo, setCampoActivo] = useState<'nombre' | 'sku' | null>(null)
   const [empresaId, setEmpresaId] = useState<string | null>(null)
 
   const { disponible, verificando } = useSkuDisponibilidad(sku, empresaId)
@@ -107,9 +108,9 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
     obtenerMiEmpresaId().then(setEmpresaId)
   }, [])
 
-  // Fetch similar products when SKU changes (debounced)
+  // Fetch similar products when SKU changes (debounced) — only when SKU field is focused
   useEffect(() => {
-    if (!sku.trim() || !empresaId) {
+    if (!sku.trim() || !empresaId || campoActivo !== 'sku') {
       setSimilarSkus([])
       return
     }
@@ -128,11 +129,11 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       cancelled = true
       clearTimeout(timer)
     }
-  }, [sku, empresaId])
+  }, [sku, empresaId, campoActivo])
 
-  // Fetch similar products when name changes (debounced) — duplicate detection while typing
+  // Fetch similar products when name changes (debounced) — only when name field is focused
   useEffect(() => {
-    if (!nombre.trim() || !empresaId || nombre.trim().length < 3) {
+    if (!nombre.trim() || !empresaId || nombre.trim().length < 3 || campoActivo !== 'nombre') {
       setNombreSimilares([])
       return
     }
@@ -183,7 +184,7 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
       cancelled = true
       clearTimeout(timer)
     }
-  }, [nombre, empresaId, config?.umbral_similitud, esEdicion, producto?.sku])
+  }, [nombre, empresaId, config?.umbral_similitud, esEdicion, producto?.sku, campoActivo])
 
   // Sync SKU preview into state when auto-gen is active
   useEffect(() => {
@@ -574,9 +575,15 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
             <button type="button" onClick={onClose} aria-label="Cerrar">×</button>
           </header>
           <form onSubmit={onSubmit} className="form-grid">
-            <label className="span-2" style={{ position: 'relative' }}>
+            <label className="span-2">
               Nombre*
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+              <input
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                onFocus={() => setCampoActivo('nombre')}
+                onBlur={() => setCampoActivo(null)}
+                required
+              />
               {nombreSimilares.length > 0 && nombre.trim().length >= 3 && (
                 <div className="nombre-similares-dropdown">
                   <span className="nombre-similares-title">
@@ -606,6 +613,8 @@ export function ProductoForm({ producto, categorias, onClose, onSaved }: Props) 
                   disabled={skuReadOnly}
                   readOnly={skuReadOnly}
                   style={{ textTransform: 'uppercase' }}
+                  onFocus={() => setCampoActivo('sku')}
+                  onBlur={() => setCampoActivo(null)}
                 />
               </label>
               <SkuAvailabilityIndicator verificando={verificando} disponible={disponible} />
