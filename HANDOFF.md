@@ -91,7 +91,15 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-29, session: SKU edit mode fix)
+## Estado actual (última actualización: 2026-07-29, session: Similarity dropdown UX fix)
+
+### ProductoForm — Similitudes solo con foco (2026-07-29)
+**Problema:** Los dropdowns de similitudes (nombre y SKU) aparecían siempre al abrir el form de edición, y el de nombre cubría los campos de abajo con `position: absolute`.
+
+**Fix:**
+- Nuevo state `campoActivo` — rastrea qué campo tiene foco (`'nombre'` | `'sku'` | `null`)
+- Effects de similitud solo se ejecutan cuando `campoActivo` coincide con el campo relevante
+- Dropdown de nombre cambió de `position: absolute` a `position relative` — empuja contenido en vez de superponer
 
 ### ProductoForm — SKU edit mode fix (2026-07-29)
 **Problema:** Al abrir el form de edición, el campo SKU quedaba habilitado antes de que cargue la config. Además, el effect de `skuPreview` sobreescribía el SKU existente con uno nuevo.
