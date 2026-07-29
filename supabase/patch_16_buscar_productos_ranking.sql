@@ -3,8 +3,13 @@
 -- buscar_productos — mejora de ranking: SUM() en vez de MIN(), bonus por
 -- coincidencias al inicio de palabras.
 -- SECURITY INVOKER: hereda RLS (aislamiento por empresa_id).
+-- NOTA: requiere DROP previo porque la función original tiene OUT parameters.
 -- ----------------------------------------------------------------------------
 
+-- 1. Drop the old function (has different return type with OUT parameters)
+DROP FUNCTION IF EXISTS buscar_productos(uuid, text, uuid, boolean, integer, integer, text);
+
+-- 2. Create the improved version
 CREATE OR REPLACE FUNCTION buscar_productos(
   p_empresa_id uuid,
   p_search text DEFAULT '',
