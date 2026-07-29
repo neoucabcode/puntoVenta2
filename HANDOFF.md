@@ -91,7 +91,17 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-29, session: SKU category prefix fix)
+## Estado actual (última actualización: 2026-07-29, session: Search ranking fix)
+
+### Buscador — Ranking mejorado (2026-07-29)
+**Problema:** El scoring usaba `MIN()` (peor match entre tokens), así que "CAP 50" y "CAP 1.5MF" obtenían el mismo score. El desempate era puramente alfabético.
+
+**Fix:** `patch_16` — `buscar_productos` ahora usa scoring compuesto:
+1. Cantidad de tokens con match de palabra (word-start) — DESC
+2. Suma de scores por token — ASC (menor es mejor)
+3. Nombre alfabético
+
+Ejemplo: "trans met" → "TRANSMISION METALICA" (2 word-start matches) aparece antes que "TRANSMISION 10 DIENTES" (1 word-start + 1 substring).
 
 ### SKU — Fallback de categoría (2026-07-29)
 **Problema:** Con plantilla `categoria_secuencial`, el SKU mostraba solo "001" en vez de "CAP-001". Las categorías no tenían `codigo` en la DB, y el RPC lanzaba excepción.
@@ -369,25 +379,28 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 
 ---
 
-## Resumen sesión 2026-07-29 (SKU category prefix fix)
+## Resumen sesión 2026-07-29 (Search ranking fix + SKU category prefix)
 
 ### Qué hicimos
-1. **SKU category prefix** — `obtenerPreviewSku()` ahora deriva el prefijo de 3 letras del nombre de la categoría cuando `codigo` es NULL
+1. **SKU category prefix** — `obtenerPreviewSku()` deriva prefijo de 3 letras del nombre de categoría cuando `codigo` es NULL
 2. **listarCategorias** — ahora incluye `codigo` en el select
 3. **patch_15** — RPC `generar_sku` con fallback de nombre + backfill de categorías existentes
+4. **patch_16** — RPC `buscar_productos` con scoring compuesto (SUM en vez de MIN, bonus por word-start matches)
 
 ### Archivos modificados
 - `web/src/lib/sku.ts` — fallback de código desde nombre
 - `web/src/lib/productos.ts` — listarCategorias incluye codigo
 - `supabase/patch_15_sku_categoria_fallback.sql` (NUEVO)
+- `supabase/patch_16_buscar_productos_ranking.sql` (NUEVO)
 - `HANDOFF.md` — actualizado
 
 ### Estado
 - TypeScript: 0 errores
 - Tests: 170/170 pasan (24 archivos)
-- Git: develop, pendiente commit + push
+- Git: develop, 2 commits ahead (pendiente push)
 
 ### Pendiente para próxima sesión
+- Aplicar `patch_16` en Supabase Dashboard → SQL Editor
 - Regla "SKU no editable" — validación server-side
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI
