@@ -6,6 +6,9 @@ import {
   type Categoria,
 } from '../lib/productos'
 import { obtenerCatalogo } from '../lib/cacheCatalogo'
+import { useUIStore } from '../lib/ui-store'
+import { useCajaStore } from '../store/useCajaStore'
+import { fmtBs } from '../types/carrito'
 import { DataTable } from '../components/DataTable'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 
@@ -13,7 +16,9 @@ export function CatalogoPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
-  const [soloActivos, setSoloActivos] = useState(true)
+  const soloActivos = useUIStore((s) => s.soloActivos)
+  const ocultarAgotados = useUIStore((s) => s.ocultarAgotados)
+  const tasaBCV = useCajaStore((s) => s.tasaBCV)
   const [usandoCache, setUsandoCache] = useState(false)
   const [vista, setVista] = useState<'grid' | 'lista'>('grid')
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null)
@@ -26,8 +31,8 @@ export function CatalogoPage() {
 
   // Memoizar filtros: el hook solo resetea offset cuando cambia la referencia
   const filters = useMemo(
-    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos }),
-    [search, categoriaFiltro, soloActivos]
+    () => ({ search, categoriaId: categoriaFiltro || null, soloActivos, ocultarAgotados }),
+    [search, categoriaFiltro, soloActivos, ocultarAgotados]
   )
 
   // El catálogo es SOLO LECTURA de forma permanente (Slice 1): lista, búsqueda y
@@ -43,7 +48,7 @@ export function CatalogoPage() {
             categoriaId,
             soloActivos,
             offset,
-            pageSize,
+            pageSize: (pageSize ?? 50) + (ocultarAgotados ? 20 : 0), // fetch extra to compensate filtering
           }),
         { guardarEnCache: offset === 0 }
       )
@@ -58,6 +63,12 @@ export function CatalogoPage() {
   useEffect(() => {
     setScrollRoot(vista === 'grid' ? gridScrollRef.current : listaScrollRef.current)
   }, [vista])
+
+  // Filtro cliente: ocultar agotados (stock_actual <= 0)
+  const displayItems = useMemo(
+    () => ocultarAgotados ? items.filter((p) => p.stock_actual > 0) : items,
+    [items, ocultarAgotados]
+  )
 
   useEffect(() => {
     listarCategorias()
@@ -118,14 +129,6 @@ export function CatalogoPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={soloActivos}
-              onChange={(e) => setSoloActivos(e.target.checked)}
-            />
-            Solo activos
-          </label>
           <div className="toggle-vista" role="group" aria-label="Vista">
             <button
               className={vista === 'grid' ? 'active' : ''}
@@ -152,12 +155,12 @@ export function CatalogoPage() {
 
           {loading ? (
             <p>Cargando…</p>
-          ) : items.length === 0 ? (
+          ) : displayItems.length === 0 ? (
             <p>No hay productos para los filtros actuales</p>
           ) : vista === 'grid' ? (
             <div className="productos-grid-scroll" ref={gridScrollRef}>
               <div className="productos-grid">
-                {items.map((p) => {
+                {displayItems.map((p) => {
                   const st = stockEstado(p)
                   return (
                     <article key={p.id} className={`card-producto ${p.activo ? '' : 'inactivo'}`}>
@@ -169,10 +172,11 @@ export function CatalogoPage() {
                             {imgErrors.has(p.id) ? 'broken_image' : 'inventory_2'}
                           </span>
                         )}
-                        <span className={`ribbon ${st}`}>{stockLabel[st]}</span>
+                        <div className={`card-stock ${st === 'ok' ? 'ok' : st === 'warn' ? 'warn' : 'off'}`}>
+                          {p.stock_actual} uds
+                        </div>
                       </div>
                       <div className="card-info">
-                        <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
                         <div className="card-nombre">{p.nombre}</div>
                         <div className="card-meta">
                           <span>{p.categoria?.nombre ?? '—'}</span>
@@ -180,13 +184,13 @@ export function CatalogoPage() {
                         <div className="card-footer">
                           <div className="card-precio">
                             {p.precio_usd > 0 ? (
-                              `$${p.precio_usd.toFixed(2)}`
+                              <>
+                                ${p.precio_usd.toFixed(2)}
+                                <span className="card-precio-bs">{fmtBs(p.precio_usd * tasaBCV)}</span>
+                              </>
                             ) : (
                               <span className="badge warn">sin precio</span>
                             )}
-                          </div>
-                          <div className={`card-stock ${st === 'off' ? 'off' : st === 'warn' ? 'warn' : ''}`}>
-                            {p.stock_actual} uds
                           </div>
                         </div>
                       </div>
@@ -228,7 +232,7 @@ export function CatalogoPage() {
                   render: (p: ProductoJoin) => <span className={`badge ${stockEstado(p)}`}>{stockLabel[stockEstado(p)]}</span>,
                 },
               ]}
-              filas={items}
+              filas={displayItems}
               rowKey={(p) => p.id}
               isInactivo={(p) => !p.activo}
               empty="No hay productos para los filtros actuales"

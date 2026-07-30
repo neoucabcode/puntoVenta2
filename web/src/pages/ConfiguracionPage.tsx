@@ -51,7 +51,6 @@ export function ConfiguracionPage() {
   const [skuError, setSkuError] = useState('')
 
   // ── Empresa state ──
-  const [tasaActiva, setTasaActiva] = useState<number>(0)
   const [igtfHabilitado, setIgtfHabilitado] = useState(false)
   const [ventaSinStock, setVentaSinStock] = useState(false)
   const [stockNegativo, setStockNegativo] = useState(false)
@@ -79,7 +78,6 @@ export function ConfiguracionPage() {
     try {
       const data = await obtenerMiEmpresa()
       if (data) {
-        setTasaActiva(data.tasa_activa)
         setIgtfHabilitado(data.igtf_habilitado)
         setVentaSinStock(data.venta_sin_stock)
         setStockNegativo(data.stock_negativo)
@@ -142,7 +140,6 @@ export function ConfiguracionPage() {
     setEmpresaError('')
     try {
       await actualizarMiEmpresa({
-        tasa_activa: tasaActiva,
         igtf_habilitado: igtfHabilitado,
         venta_sin_stock: ventaSinStock,
         stock_negativo: stockNegativo,
@@ -315,27 +312,6 @@ export function ConfiguracionPage() {
           <div className="config-section" role="tabpanel">
             <div className="config-section-header">
               <h2>Datos de la empresa</h2>
-            </div>
-
-            <div className="config-card">
-              <div className="config-card-header">
-                <h3>Tasa de cambio</h3>
-              </div>
-              <div className="config-card-body">
-                <label className="config-field">
-                  <span className="config-field-label">Tasa activa (Bs/USD)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={tasaActiva}
-                    onChange={(e) => setTasaActiva(Number(e.target.value))}
-                  />
-                  <span className="config-field-hint">
-                    Tasa del BCV para conversión de precios
-                  </span>
-                </label>
-              </div>
             </div>
 
             <div className="config-card">

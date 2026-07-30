@@ -14,12 +14,16 @@ import {
 } from '../lib/productos'
 import { obtenerMiEmpresaId } from '../lib/empresa'
 import { exportarCatalogo } from '../lib/catalogo'
+import { useUIStore } from '../lib/ui-store'
 import { ProductoForm } from '../components/ProductoForm'
+import { ProductoSearchModal } from '../components/ProductoSearchModal'
 import { CatalogImportModal } from '../components/CatalogImportModal'
 import { DataTable } from '../components/DataTable'
 import { ConfirmarEliminarModal } from '../components/ConfirmarEliminarModal'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
+import { useCajaStore } from '../store/useCajaStore'
+import { fmtBs } from '../types/carrito'
 
 function fmtUsd(n: number): string {
   return `$${n.toFixed(2)}`
@@ -32,7 +36,13 @@ function esBajoStock(p: ProductoJoin): boolean {
 type DeleteTarget = { producto: ProductoJoin; mode: 'desactivar' | 'eliminar' }
 
 export function InventarioPage() {
-  const { inventarioHabilitado, esAdmin } = useUsuarioRol()
+  const { inventarioHabilitado } = useUsuarioRol()
+
+  const inventarioAccion = useUIStore((s) => s.inventarioAccion)
+  const setInventarioAccion = useUIStore((s) => s.setInventarioAccion)
+  const exportarCatalogoTrigger = useUIStore((s) => s.exportarCatalogoTrigger)
+  const importarCatalogoTrigger = useUIStore((s) => s.importarCatalogoTrigger)
+  const tasaBCV = useCajaStore((s) => s.tasaBCV)
 
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
@@ -46,7 +56,7 @@ export function InventarioPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleteSaving, setDeleteSaving] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const [showSearchModal, setShowSearchModal] = useState(false)
 
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
@@ -79,6 +89,27 @@ export function InventarioPage() {
       .then(setCategorias)
       .catch((err) => setActionError((err as Error).message))
   }, [])
+
+  // Listen for topbar dropdown actions
+  useEffect(() => {
+    if (inventarioAccion === 'nuevo') {
+      setShowNuevo(true)
+      setInventarioAccion(null)
+    } else if (inventarioAccion === 'editar') {
+      setShowSearchModal(true)
+      setInventarioAccion(null)
+    }
+  }, [inventarioAccion, setInventarioAccion])
+
+  // Listen for topbar export trigger
+  useEffect(() => {
+    if (exportarCatalogoTrigger > 0) void onExportarCatalogo()
+  }, [exportarCatalogoTrigger])
+
+  // Listen for topbar import trigger
+  useEffect(() => {
+    if (importarCatalogoTrigger > 0) setShowImportModal(true)
+  }, [importarCatalogoTrigger])
 
   const valuacion = useMemo(() => calcularValuacion(items), [items])
 
@@ -131,7 +162,6 @@ export function InventarioPage() {
   }
 
   async function onExportarCatalogo() {
-    setExporting(true)
     setActionError('')
     try {
       const empresaId = await obtenerMiEmpresaId()
@@ -145,8 +175,6 @@ export function InventarioPage() {
       URL.revokeObjectURL(url)
     } catch (err) {
       setActionError((err as Error).message)
-    } finally {
-      setExporting(false)
     }
   }
 
@@ -215,27 +243,6 @@ export function InventarioPage() {
               title="Lista"
             ><span className="material-symbols-outlined">list</span></button>
           </div>
-          {esAdmin && (
-            <>
-              <button
-                className="icon-only"
-                onClick={() => void onExportarCatalogo()}
-                disabled={exporting}
-                title="Exportar catálogo"
-                aria-label="Exportar catálogo"
-              >
-                <span className="material-symbols-outlined">download</span>
-              </button>
-              <button
-                className="icon-only"
-                onClick={() => setShowImportModal(true)}
-                title="Importar catálogo"
-                aria-label="Importar catálogo"
-              >
-                <span className="material-symbols-outlined">upload</span>
-              </button>
-            </>
-          )}
           <button
             className="primary icon-only"
             onClick={() => setShowNuevo(true)}
@@ -264,34 +271,28 @@ export function InventarioPage() {
                       ) : (
                         <span className="thumb-empty material-symbols-outlined">inventory_2</span>
                       )}
-                      {esBajoStock(p) && (
-                        <span className="ribbon warn" title={`Por debajo del mínimo (${p.stock_minimo})`}>
-                          <span className="material-symbols-outlined">warning</span> Bajo stock
-                        </span>
-                      )}
+                      <div className={`card-stock ${!p.activo ? 'off' : p.stock_actual <= 0 ? 'off' : esBajoStock(p) ? 'warn' : 'ok'}`}>
+                        {p.stock_actual} uds
+                      </div>
                     </div>
-                    <div className="card-info">
-                      <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
-                      <div className="card-nombre">{p.nombre}</div>
-                      <div className="card-meta">
-                        <span>{p.categoria?.nombre ?? '—'}</span>
-                      </div>
-                      <div className="card-footer">
-                        <div className="card-precio">
-                          {p.precio_usd > 0 ? (
-                            `$${p.precio_usd.toFixed(2)}`
-                          ) : (
-                            <span className="badge warn">sin precio</span>
-                          )}
+                      <div className="card-info">
+                        <div className="card-nombre">{p.nombre}</div>
+                        <div className="card-meta">
+                          <span>{p.categoria?.nombre ?? '—'}</span>
                         </div>
-                        <div className={`card-stock ${!p.activo ? 'off' : esBajoStock(p) ? 'warn' : ''}`}>
-                          {p.stock_actual} uds
+                        <div className="card-footer">
+                          <div className="card-precio">
+                            {p.precio_usd > 0 ? (
+                              <>
+                                ${p.precio_usd.toFixed(2)}
+                                <span className="card-precio-bs">{fmtBs(p.precio_usd * tasaBCV)}</span>
+                              </>
+                            ) : (
+                              <span className="badge warn">sin precio</span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="card-costo">
-                        <span className="num-tab">{fmtUsd(p.costo_usd)}</span>
-                      </div>
-                      <div className="card-actions">
+                        <div className="card-actions">
                         <button onClick={() => setEditId(p.id)} title="Editar">
                           <span className="material-symbols-outlined">edit</span>
                         </button>
@@ -442,6 +443,16 @@ export function InventarioPage() {
           onImported={() => {
             setShowImportModal(false)
             reset()
+          }}
+        />
+      )}
+
+      {showSearchModal && (
+        <ProductoSearchModal
+          onClose={() => setShowSearchModal(false)}
+          onSelect={(p) => {
+            setShowSearchModal(false)
+            setEditId(p.id)
           }}
         />
       )}

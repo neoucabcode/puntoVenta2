@@ -20,6 +20,7 @@ type Pantalla = 'venta' | 'pago'
 export function PosPage() {
   const cajaAbierta = useCajaStore((s) => s.cajaAbierta)
   const cajaHabilitada = useCajaStore((s) => s.cajaHabilitada)
+  const tasaBCV = useCajaStore((s) => s.tasaBCV)
   const soloLectura = cajaHabilitada && !cajaAbierta
 
   // ─── Store selectors ────────────────────────────────────────────
@@ -96,7 +97,8 @@ export function PosPage() {
     obtenerMiEmpresa()
       .then((emp) => {
         if (!emp) return
-        useCarritoStore.getState().setTasaBCV(emp.tasa_activa ?? 36.50)
+        // La tasa ahora se edita solo desde el topbar (persistida en Zustand).
+        // No sobreescribir desde Supabase — el valor local es la fuente de verdad.
         if (emp.igtf_habilitado != null) {
           useCarritoStore.setState({ igtfHabilitado: emp.igtf_habilitado })
         }
@@ -104,9 +106,13 @@ export function PosPage() {
           typeof navigator === 'undefined' ? true : navigator.onLine
         if (enLinea) {
           marcarTasaSincronizada()
-          setTasaActualizadaEn(new Date().toISOString())
+          const now = new Date().toISOString()
+          setTasaActualizadaEn(now)
+          useCajaStore.getState().setTasaActualizadaEn(now)
         } else {
-          setTasaActualizadaEn(leerTasaSincronizada())
+          const lastSync = leerTasaSincronizada()
+          setTasaActualizadaEn(lastSync)
+          useCajaStore.getState().setTasaActualizadaEn(lastSync)
         }
       })
       .catch(() => {})
@@ -338,20 +344,17 @@ export function PosPage() {
                         ) : (
                           <span className="thumb-empty material-symbols-outlined">inventory_2</span>
                         )}
-                        <span className={`ribbon ${st}`}>
-                          {st === 'off' ? 'Agotado' : st === 'warn' ? 'Stock bajo' : 'Disponible'}
-                        </span>
+                        <div className={`card-stock ${st === 'ok' ? 'ok' : st === 'warn' ? 'warn' : 'off'}`}>
+                          {p.stock_actual} uds
+                        </div>
                         <span className="pos-card-add" aria-hidden="true">add</span>
                       </div>
                       <div className="card-info">
-                        <div className="card-sku"><code>{p.sku ?? '—'}</code></div>
                         <div className="card-nombre">{p.nombre}</div>
                         <div className="card-footer">
                           <div className="card-precio">
                             ${Number(p.precio_usd).toFixed(2)}
-                          </div>
-                          <div className={`card-stock ${st === 'off' ? 'off' : st === 'warn' ? 'warn' : ''}`}>
-                            {p.stock_actual} uds
+                            <span className="card-precio-bs">{fmtBs(p.precio_usd * tasaBCV)}</span>
                           </div>
                         </div>
                       </div>

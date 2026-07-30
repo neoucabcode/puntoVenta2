@@ -17,10 +17,14 @@ interface CajaState {
   online: boolean
   pendientes: number
   cajaHabilitada: boolean
+  tasaBCV: number
+  tasaActualizadaEn: string | null
   setCajaAbierta: (abierta: boolean, id?: string | null) => void
   setOnline: (online: boolean) => void
   setPendientes: (n: number) => void
   setCajaHabilitada: (v: boolean) => void
+  setTasaBCV: (tasa: number) => void
+  setTasaActualizadaEn: (iso: string | null) => void
   refrescar: () => Promise<void>
 }
 
@@ -32,11 +36,15 @@ export const useCajaStore = create<CajaState>()(
       online: true,
       pendientes: 0,
       cajaHabilitada: true,
+      tasaBCV: 36.50,
+      tasaActualizadaEn: null,
       setCajaAbierta: (abierta, id = null) =>
         set({ cajaAbierta: abierta, sesionCajaId: id }),
       setOnline: (online) => set({ online }),
       setPendientes: (n) => set({ pendientes: n }),
       setCajaHabilitada: (v) => set({ cajaHabilitada: v }),
+      setTasaBCV: (tasa) => set({ tasaBCV: tasa }),
+      setTasaActualizadaEn: (iso) => set({ tasaActualizadaEn: iso }),
       refrescar: async () => {
         try {
           const emp = await obtenerMiEmpresa()
@@ -68,6 +76,7 @@ export const useCajaStore = create<CajaState>()(
       partialize: (s) => ({
         cajaAbierta: s.cajaAbierta,
         sesionCajaId: s.sesionCajaId,
+        tasaBCV: s.tasaBCV,
       }),
     }
   )
