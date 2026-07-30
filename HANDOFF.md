@@ -91,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-29, session: Similarity dropdown UX fix)
+## Estado actual (última actualización: 2026-07-30, session: Topbar restructure + Cards grid unification)
 
 ### ProductoForm — Similitudes solo con foco (2026-07-29)
 **Problema:** Los dropdowns de similitudes (nombre y SKU) aparecían siempre al abrir el form de edición, y el de nombre cubría los campos de abajo con `position: absolute`.
@@ -424,3 +424,88 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI
 - Verificar en prod que el upsert de config funciona (puede que la empresa no tenga fila de config)
+
+---
+
+## Resumen sesión 2026-07-30 (Topbar restructure + Cards grid unification + Light mode)
+
+### Topbar — Restructura completa (2026-07-30)
+**Cambios:**
+- **Dropdowns en nav items:** Venta (Caja + HistorialVenta), Catálogo (Solo Activos, Ocultar Agotados), Inventario (Producto Nuevo, Editar, Importar, Exportar). Label navega, arrow toggle dropdown.
+- **Tasa BCV editable inline:** click → input → Enter o click-fuera guarda. Persiste en Zustand store (`useCajaStore.tasaBCV` + `partialize`). PosPage ya NO sobreescribe desde Supabase.
+- **Fix Enter bug:** causa raíz = `onBlur` se dispara 2 veces al presionar Enter. Fix: `editandoTasaRef` (useRef boolean) — solo `iniciarEdicionTasa` pone `true`, `guardarTasa` consume en primera línea y pone `false`. El que llega primero gana.
+- **Eliminado hamburger/drawer mobile** — labels siempre visibles, sin menú lateral.
+- **Eliminado estado-conexion** (icono wifi inline) del topbar — `SyncStatus` sigue existente.
+- **Dropdowns ya no se cortan** — CSS `right: 0` → `left: 0` en `.topbar-dropdown`.
+- **Topbar verde light mode** — fondo `#d4edda`.
+
+### Cards Grid — Unificación visual (2026-07-30)
+**Aplica a:** PosPage, CatalogoPage, InventarioPage (vista cuadrícula)
+
+**Cambios por página:**
+| Cambio | PosPage | CatalogoPage | InventarioPage |
+|--------|---------|--------------|----------------|
+| Sin `card-sku` | ✅ | ✅ | ✅ |
+| Sin `card-costo` | — | — | ✅ |
+| Stock solo en imagen | ✅ (reemplazó ribbon) | ✅ (ya estaba) | ✅ (reemplazó ribbon) |
+| Sin `card-stock` en footer | ✅ | — | ✅ |
+| Precio Bs al lado de $ | ✅ | ✅ | ✅ |
+
+- **Stock badge en imagen:** `.card-img .card-stock` con posición absoluta, fondo semitransparente (ok=verde, warn=naranja, off=rojo), opacidad 0.4.
+- **Precio Bs:** `fmtBs(p.precio_usd * tasaBCV)` en `<span className="card-precio-bs">` — font-size 0.7em, color `var(--text-muted)`.
+- **Card heights fix:** `.card-nombre` con `min-height` fijo para 2 líneas — todas las cards quedan igual altura.
+- **Images:** `object-fit: cover` en `.card-img img` para consistencia visual.
+
+### Light Mode — Ajustes (2026-07-30)
+**Variables cambiadas:**
+| Variable | Antes | Ahora |
+|----------|-------|-------|
+| `--bg-base` | `#f6f7f9` | `#ffffff` |
+| `--bg-content` | `#f6f7f9` | `#ffffff` |
+| `--elev-0` | `#f6f7f9` | `#ffffff` |
+| `--bg-sidebar` | `#ffffff` | `#f6f7f9` |
+| `--surface-1` | `#ffffff` | `#f6f7f9` |
+| `--elev-1` | `#ffffff` | `#f6f7f9` |
+| `--primary-ink` | `#ffffff` | `#f6f7f9` |
+
+**Topbar:** fondo `#d4edda` (verde intenso sutil), grids matching `#d4edda`.
+
+### Configuración — Tasa eliminada (2026-07-30)
+- Sección "Tasa de cambio" eliminada de ConfiguraciónPage (solo se edita desde topbar).
+- `tasaActiva` state eliminado, `tasa_activa` ya no se envía en `handleSaveEmpresa`.
+
+### Store — useCajaStore (2026-07-30)
+- `tasaBCV` agregado a `partialize` — persiste en localStorage (`pv-caja`).
+- `tasaActualizadaEn` agregado al state.
+- PosPage ya no sobreescribe `tasaBCV` desde Supabase al cargar.
+
+### Nuevos componentes
+- `HistorialVenta.tsx` — muestra ventas del día en dropdown de Venta.
+- `ProductoSearchModal.tsx` — búsqueda de productos por nombre/SKU para flujo de edición.
+
+### Archivos modificados
+| Archivo | Cambio principal |
+|---------|-----------------|
+| `components/TopbarUnificada.tsx` | Restructura completa, dropdowns, tasa editable, sin drawer |
+| `components/HistorialVenta.tsx` | **Nuevo** — historial de ventas del día |
+| `components/ProductoSearchModal.tsx` | **Nuevo** — búsqueda de productos |
+| `pages/PosPage.tsx` | Cards grid unificado, sin ribbon, stock en imagen, precio Bs |
+| `pages/CatalogoPage.tsx` | Cards grid unificado, sin SKU, precio Bs |
+| `pages/InventarioPage.tsx` | Cards grid unificado, sin SKU/costo, stock en imagen, precio Bs |
+| `pages/ConfiguracionPage.tsx` | Eliminada config de tasa |
+| `store/useCajaStore.ts` | tasaBCV en partialize |
+| `index.css` | Light mode, topbar verde, cards stock overlay, card-precio-bs |
+| `web/index.html` | Google Fonts Material Symbols actualizado |
+
+### Verificación
+- TypeScript: 0 errores
+- Tests: 170/170 pasan (24 archivos)
+- Git: develop, commit `e74ee02` pusheado
+
+### Pendiente conocido
+- RPC server-side (`aplicar_venta_offline`) necesita update para aceptar `version: 2` del payload
+- Catch silenciosos en `listarCategorias`/`obtenerMiEmpresa` (deuda conocida)
+- IVA 16% y IGTF 3% hardcoded (correcto para Venezuela actual)
+- Regla "SKU no editable" — validación server-side
+- 17 productos sin imagen
+- Slices 3-6 del rediseño UI
