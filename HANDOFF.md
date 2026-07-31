@@ -11,6 +11,12 @@
 >    el usuario acaba de decidir, manda la decisión nueva.
 > 3. La fuente de verdad del PROYECTO es el código funcionando + este archivo, NO GitHub.
 >    Lo de GitHub es un espejo; construimos desde aquí.
+> 4. **🚨 NUNCA `git checkout HEAD -- <archivo>` cuando hay cambios sin commitear de sesiones
+>    anteriores.** Esto BORRA los cambios no commiteados del archivo sin posibilidad de
+>    recuperación (el `git stash pop` no los restaura si el archivo ya fue sobrescrito).
+>    Si necesito revertir parcialmente, usar un patch selectivo o un editor, NUNCA
+>    `git checkout HEAD -- <archivo>` a ciegas. Ver "Lecciones de esta sesión" para el
+>    incidente del 2026-07-31 (pérdida de estilos CSS de topbar tasa pill y card-precio-usd).
 
 ## Proyecto
 Sistema de punto de venta para ferretería bimonetaria (Venezuela: BS / USD). Carpeta:
@@ -394,6 +400,12 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 - **Breakpoints responsivos:** 900px (tablet/drawer) / 600px (phone/2-col)
 - **Floating pill button:** mejor que bottom snippet para acceso rápido al carrito en móvil
 - **RETURNS TABLE vs RETURNS SETOF record:** al hacer DROP+CREATE de un RPC existente, la firma (RETURNS TABLE con columnas explícitas) debe ser IDÉNTICA. Cambiar a SETOF record rompe el mapeo de PostgREST y causa "materialize mode required".
+- **🚨 NUNCA `git checkout HEAD -- <archivo>` cuando hay cambios visuales sin commitear del
+  usuario.** El 2026-07-31 perdí los estilos de topbar-tasa pill y card-precio-usd haciendo
+  `git checkout HEAD -- web/src/index.css` mientras separaba mis cambios de los suyos.
+  El `git stash pop` no los restauró porque el archivo ya estaba sobrescrito. Si necesito
+  revertir parcialmente, usar un patch selectivo o pedirle al usuario que commitee primero.
+  REGLA DE ORO #4 (arriba).
 
 ---
 
