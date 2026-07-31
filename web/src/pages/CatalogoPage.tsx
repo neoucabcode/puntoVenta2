@@ -185,7 +185,7 @@ export function CatalogoPage() {
                           <div className="card-precio">
                             {p.precio_usd > 0 ? (
                               <>
-                                ${p.precio_usd.toFixed(2)}
+                                <span className="card-precio-usd">${p.precio_usd.toFixed(2)}</span>
                                 <span className="card-precio-bs">{fmtBs(p.precio_usd * tasaBCV)}</span>
                               </>
                             ) : (

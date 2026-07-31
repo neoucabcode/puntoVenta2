@@ -128,7 +128,7 @@ async function makeCatalogZip(catalogJson?: string, opts?: { withImages?: boolea
   const zip = new JSZip()
   zip.file('catalogo.json', catalogJson ?? makeCatalogoJson())
   if (opts?.withImages !== false) {
-    zip.file('imagenes/p1.webp', new Uint8Array([0x52, 0x49, 0x46, 0x46]))
+    zip.file('imagenes/FER-001.webp', new Uint8Array([0x52, 0x49, 0x46, 0x46]))
   }
   return zip.generateAsync({ type: 'blob' })
 }
@@ -220,7 +220,7 @@ describe('exportarCatalogo', () => {
     expect(catalogo.categorias).toHaveLength(2)
     expect(catalogo.productos).toHaveLength(2)
     expect(catalogo.productos[0].sku).toBe('FER-001')
-    expect(catalogo.productos[0].imagen_archivo).toBe('imagenes/p1.webp')
+    expect(catalogo.productos[0].imagen_archivo).toBe('imagenes/FER-001.webp')
     expect(catalogo.productos[1].imagen_archivo).toBeUndefined()
   })
 
@@ -228,7 +228,7 @@ describe('exportarCatalogo', () => {
     const blob = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
-    const imgFile = zip.file('imagenes/p1.webp')
+    const imgFile = zip.file('imagenes/FER-001.webp')
     expect(imgFile).not.toBeNull()
     const imgData = await imgFile!.async('uint8array')
     expect(imgData[0]).toBe(0x52) // 'R' from RIFF header
@@ -238,7 +238,7 @@ describe('exportarCatalogo', () => {
     const blob = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
-    expect(zip.file('imagenes/p2.webp')).toBeNull()
+    expect(zip.file('imagenes/PIN-001.webp')).toBeNull()
   })
 
   it('maneja graciosamente productos sin imagen (download falla)', async () => {

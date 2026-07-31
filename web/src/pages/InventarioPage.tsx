@@ -7,7 +7,6 @@ import {
   reactivarProducto,
   eliminarProducto,
 
-  calcularValuacion,
   registrarHistorial,
   type ProductoJoin,
   type Categoria,
@@ -111,7 +110,6 @@ export function InventarioPage() {
     if (importarCatalogoTrigger > 0) setShowImportModal(true)
   }, [importarCatalogoTrigger])
 
-  const valuacion = useMemo(() => calcularValuacion(items), [items])
 
 
   function onDesactivarClick(p: ProductoJoin) {
@@ -284,7 +282,7 @@ export function InventarioPage() {
                           <div className="card-precio">
                             {p.precio_usd > 0 ? (
                               <>
-                                ${p.precio_usd.toFixed(2)}
+                                <span className="card-precio-usd">${p.precio_usd.toFixed(2)}</span>
                                 <span className="card-precio-bs">{fmtBs(p.precio_usd * tasaBCV)}</span>
                               </>
                             ) : (
@@ -381,11 +379,6 @@ export function InventarioPage() {
         </main>
       </div>
 
-      <footer className="inv-valuacion">
-        <span className="inv-valuacion-label">Valuación de inventario</span>
-        <span className="inv-valuacion-monto num-tab">{fmtUsd(valuacion)}</span>
-        <span className="inv-valuacion-nota">Σ (costo × stock)</span>
-      </footer>
 
       {(showNuevo || edicion) && (
         <ProductoForm

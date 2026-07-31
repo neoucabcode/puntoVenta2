@@ -330,7 +330,7 @@ export function TopbarUnificada() {
           )}
         </span>
         <span className={`topbar-tasa-update ${tasaDesactualizada ? 'topbar-tasa-update-stale' : ''}`}>
-          {fmtTiempoRelativo(tasaActualizadaEn ?? leerTasaSincronizada())}
+          {tasaDesactualizada ? '⚠ pendiente de actualización' : fmtTiempoRelativo(tasaActualizadaEn ?? leerTasaSincronizada())}
         </span>
       </div>
 

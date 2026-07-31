@@ -353,7 +353,7 @@ export function PosPage() {
                         <div className="card-nombre">{p.nombre}</div>
                         <div className="card-footer">
                           <div className="card-precio">
-                            ${Number(p.precio_usd).toFixed(2)}
+                            <span className="card-precio-usd">${Number(p.precio_usd).toFixed(2)}</span>
                             <span className="card-precio-bs">{fmtBs(p.precio_usd * tasaBCV)}</span>
                           </div>
                         </div>

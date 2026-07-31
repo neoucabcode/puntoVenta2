@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
-  calcularValuacion,
   aplicarAjusteStock,
   crearProducto,
   crearCategoria,
@@ -73,17 +72,6 @@ vi.mock('../lib/empresa', () => ({
   obtenerMiEmpresaId: async () => h.empresaId,
   obtenerMiUsuarioId: async () => 'usr-x',
 }))
-
-describe('calcularValuacion', () => {
-  it('Σ costo×stock = 50 (A: 10×3, B: 5×4)', () => {
-    expect(
-      calcularValuacion([
-        { costo_usd: 10, stock_actual: 3 },
-        { costo_usd: 5, stock_actual: 4 },
-      ])
-    ).toBe(50)
-  })
-})
 
 describe('aplicarAjusteStock (RPC aplicar_ajuste_stock)', () => {
   beforeEach(() => {

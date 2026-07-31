@@ -339,12 +339,6 @@ export async function verificarCodigoDuplicado(
   return (data ?? []).length > 0
 }
 
-// Valuación total del inventario = Σ(costo × stock) del tenant.
-export function calcularValuacion(
-  productos: Array<{ costo_usd: number; stock_actual: number }>
-): number {
-  return productos.reduce((acc, p) => acc + (p.costo_usd * p.stock_actual), 0)
-}
 
 // Mapea el motivo legible del ajuste al `tipo` de `movimiento_inventario`.
 function mapearMotivoATipo(motivo: string): string {

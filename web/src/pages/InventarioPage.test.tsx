@@ -12,7 +12,7 @@ vi.mock('../hooks/useUsuarioRol', () => ({
 }))
 
 describe('InventarioPage gate por rol', () => {
-  it('admin ve CRUD + valuación', () => {
+  it('admin ve CRUD', () => {
     h.rol = { rol: 'admin', esAdmin: true, inventarioHabilitado: true, loading: false }
     const html = renderToStaticMarkup(
       <MemoryRouter>
@@ -20,7 +20,6 @@ describe('InventarioPage gate por rol', () => {
       </MemoryRouter>
     )
     expect(html).toContain('Nuevo producto')
-    expect(html).toContain('Valuación de inventario')
   })
 
   it('no-admin ve acceso restringido y sin controles de edición', () => {

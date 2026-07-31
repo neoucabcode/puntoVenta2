@@ -98,7 +98,7 @@ export async function exportarCatalogo(empresaId: string): Promise<Blob> {
       unidad: p.unidad,
       costo_usd: p.costo_usd,
       precio_usd: p.precio_usd,
-      ...(p.imagen_url ? { imagen_archivo: `imagenes/${p.id}.webp` } : {}),
+      ...(p.imagen_url && p.sku ? { imagen_archivo: `imagenes/${p.sku}.webp` } : {}),
     })),
   }
 
@@ -107,15 +107,15 @@ export async function exportarCatalogo(empresaId: string): Promise<Blob> {
   zip.file('catalogo.json', JSON.stringify(catalogo, null, 2))
   const imgFolder = zip.folder('imagenes')!
 
-  // 5. Download images for products that have one
+  // 5. Download images for products that have one (named by SKU for portability)
   for (const p of productos) {
-    if (!p.imagen_url) continue
+    if (!p.imagen_url || !p.sku) continue
     const filePath = `${empresaId}/${p.id}.webp`
     const { data: blob, error: dlErr } = await supabase.storage
       .from('productos')
       .download(filePath)
     if (dlErr || !blob) continue // skip missing images gracefully
-    imgFolder.file(`${p.id}.webp`, blob)
+    imgFolder.file(`${p.sku}.webp`, blob)
   }
 
   return zip.generateAsync({ type: 'blob' })
