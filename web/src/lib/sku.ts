@@ -70,6 +70,34 @@ export async function generarSku(
   return (data as string | null) ?? null
 }
 
+// Regenera masivamente los SKUs de todos los productos de una empresa.
+// Resetea los contadores y regenera en orden de creación usando la config actual.
+// Solo admins pueden ejecutar (el RPC valida con auth.uid() + rol).
+export type ResultadoRegenerarSku = {
+  regenerados: number
+  errores: Array<{ producto_id: string; error: string }>
+}
+
+export async function regenerarSkusEnLote(
+  empresaId: string
+): Promise<ResultadoRegenerarSku> {
+  if (!supabase) {
+    throw new Error('La regeneración masiva requiere conexión con la base de datos')
+  }
+
+  const { data, error } = await supabase.rpc('regenerar_sku_lote', {
+    p_empresa_id: empresaId,
+  })
+  if (error) throw error
+
+  const row = Array.isArray(data) ? data[0] : data
+  const errores = (row?.errores ?? []) as Array<{ producto_id: string; error: string }>
+  return {
+    regenerados: Number(row?.regenerados ?? 0),
+    errores,
+  }
+}
+
 // Lee el contador actual SIN incrementarlo, para previsualizar el próximo SKU.
 // Devuelve null si no hay configuración o autogenerar está desactivado.
 export async function obtenerPreviewSku(

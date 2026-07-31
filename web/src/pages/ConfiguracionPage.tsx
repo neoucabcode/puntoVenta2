@@ -7,6 +7,7 @@ import { obtenerMiEmpresa, obtenerMiEmpresaId, actualizarMiEmpresa } from '../li
 import { actualizarConfigSku } from '../lib/sku'
 import { toggleModulo, MODULOS_DISPONIBLES } from '../lib/modulos'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { RegenerarSkuWizard } from '../components/RegenerarSkuWizard'
 
 type TabId = 'sku' | 'empresa' | 'modulos'
 
@@ -61,6 +62,9 @@ export function ConfiguracionPage() {
   // ── Modulos state ──
   const [moduloToToggle, setModuloToToggle] = useState<{ nombre: string; habilitado: boolean } | null>(null)
   const [moduloToggling, setModuloToggling] = useState(false)
+
+  // ── Regenerar SKU wizard ──
+  const [showRegenerarWizard, setShowRegenerarWizard] = useState(false)
 
   // ── Initialize SKU from config (proper useEffect) ──
   useEffect(() => {
@@ -303,6 +307,27 @@ export function ConfiguracionPage() {
               </div>
             </div>
 
+            <div className="config-card config-card-danger">
+              <div className="config-card-header">
+                <h3>Zona peligrosa</h3>
+              </div>
+              <div className="config-card-body">
+                <p className="config-field-hint">
+                  Regenera masivamente los SKU de todos los productos, reseteando los
+                  contadores. Útil cuando cambiás el formato de SKU o querés un esquema
+                  limpio.
+                </p>
+                <button
+                  type="button"
+                  className="config-btn-danger"
+                  onClick={() => setShowRegenerarWizard(true)}
+                  disabled={!config}
+                >
+                  Regenerar todos los SKU
+                </button>
+              </div>
+            </div>
+
             {skuError && <p className="config-error">{skuError}</p>}
           </div>
         )}
@@ -443,6 +468,11 @@ export function ConfiguracionPage() {
           onConfirm={handleToggleModulo}
           onCancel={() => setModuloToToggle(null)}
         />
+      )}
+
+      {/* Regenerar SKU wizard */}
+      {showRegenerarWizard && (
+        <RegenerarSkuWizard onClose={() => setShowRegenerarWizard(false)} />
       )}
     </div>
   )

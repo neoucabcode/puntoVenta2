@@ -91,7 +91,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-30, session: Topbar restructure + Cards grid unification)
+## Estado actual (última actualización: 2026-07-31, session: Regeneración masiva de SKU)
 
 ### ProductoForm — Similitudes solo con foco (2026-07-29)
 **Problema:** Los dropdowns de similitudes (nombre y SKU) aparecían siempre al abrir el form de edición, y el de nombre cubría los campos de abajo con `position: absolute`.
@@ -420,6 +420,169 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 - Git: develop, 4 commits ahead (ya pusheados)
 
 ### Pendiente para próxima sesión
+- Regla "SKU no editable" — validación server-side
+- 17 productos sin imagen
+- Slices 3-6 del rediseño UI
+
+---
+
+## Resumen sesión 2026-07-31 (Catálogo export portable)
+
+### Problema
+La exportación de catálogo usaba UUIDs internos para nombrar archivos de imagen (`imagenes/abc-123-def.webp`). Esto hacía que el ZIP no fuera portable — otro programa no sabía qué era `abc-123-def`. Además, la importación buscaba imágenes por SKU pero el archivo tenía el UUID, causando pérdida silenciosa de imágenes al reimportar.
+
+### Fix
+- **Export:** imágenes ahora se nombran por SKU (`imagenes/FER-001.webp`) en vez de UUID
+- **Import:** ya buscaba por SKU, así que ahora cuadra con el formato del export
+- **Guard:** productos sin SKU no exportan imagen (no tendría nombre válido)
+
+### Formato del ZIP resultante
+```
+catalogo.json
+imagenes/
+  FER-001.webp
+  PIN-001.webp
+  ...
+```
+
+### JSON exportado
+```json
+{
+  "version": "1.0",
+  "exportado_en": "2026-07-31T...",
+  "categorias": [{ "nombre": "Ferretes", "codigo": "FER" }],
+  "productos": [{
+    "sku": "FER-001",
+    "nombre": "Tornillo 1/4",
+    "categoria_nombre": "Ferretes",
+    "unidad": "unidad",
+    "costo_usd": 0.1,
+    "precio_usd": 0.25,
+    "imagen_archivo": "imagenes/FER-001.webp"
+  }]
+}
+```
+
+### Archivos modificados
+| Archivo | Cambio |
+|---------|--------|
+| `lib/catalogo.ts` | Export usa SKU para nombres de imagen, guard en productos sin SKU |
+| `lib/catalogo.test.ts` | Tests actualizados para nuevo formato (SKU-based filenames) |
+
+### Verificación
+- TypeScript: 0 errores
+- Tests: 32/32 pasan (19 catalogo + 13 productos)
+
+---
+
+## Resumen sesión 2026-07-31 (Regeneración masiva de SKU)
+
+### Feature nueva
+Wizard multi-paso para regenerar todos los SKU de una empresa con reset de contadores.
+
+### Flujo del wizard
+1. **Intro**: advertencia + opción de exportar catálogo actual como backup (opcional pero recomendado)
+2. **Config**: formulario con plantilla (categoría/solo/prefijo), modo contador, longitud, prefijo manual
+3. **Confirm**: muestra resumen de la config + última advertencia
+4. **Executing**: spinner mientras se ejecuta
+5. **Result**: muestra regenerados + errores (si los hay)
+
+### Implementación
+
+**SQL** (`patch_17_regenerar_sku_lote.sql`):
+- RPC `regenerar_sku_lote(p_empresa_id uuid) RETURNS TABLE(regenerados int, errores jsonb)`
+- SECURITY DEFINER + check admin via `auth.uid()`
+- DELETE contadores → loop productos (ORDER BY creado_en) → llamar `generar_sku` por cada uno
+- Captura errores por producto sin abortar todo el batch
+
+**Frontend**:
+- `lib/sku.ts`: nueva función `regenerarSkusEnLote(empresaId)` que llama al RPC
+- `components/RegenerarSkuWizard.tsx`: wizard multi-paso
+- `pages/ConfiguracionPage.tsx`: nueva card "Zona peligrosa" en tab SKU con botón que abre el wizard (admin-only)
+- `index.css`: estilos para wizard + danger zone
+
+### Decisiones de diseño
+- **No se delega a actualizarConfigSku + regenerarSkusEnLote en el frontend**: el wizard primero guarda la config nueva vía `actualizarConfigSku`, luego llama `regenerarSkusEnLote` (que usa la config ya actualizada)
+- **Producto que devuelve NULL**: se reporta como error (autogenerar_activo probablemente desactivado)
+- **Export opcional, no bloqueante**: si la export falla, el wizard continúa
+
+### Archivos modificados
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/patch_17_regenerar_sku_lote.sql` | **Nuevo** — RPC regenerar_sku_lote |
+| `web/src/lib/sku.ts` | Agregado regenerarSkusEnLote + tipo ResultadoRegenerarSku |
+| `web/src/lib/regenerar-sku.test.ts` | **Nuevo** — 5 tests |
+| `web/src/components/RegenerarSkuWizard.tsx` | **Nuevo** — wizard multi-paso |
+| `web/src/pages/ConfiguracionPage.tsx` | Import + estado + card "Zona peligrosa" + render del wizard |
+| `web/src/index.css` | Estilos wizard + danger zone |
+
+### Verificación
+- TypeScript: 0 errores
+- Tests: 174/174 pasan (169 anteriores + 5 nuevos)
+
+### Bug encontrado y corregido (2026-07-31)
+**Síntoma**: 364 errores `duplicate key value violates unique constraint "idx_producto_sku_empresa"` al ejecutar la regeneración en dev.
+
+**Causa raíz**: El RPC regeneraba SKU de a uno con `UPDATE producto SET sku = 'FER-001' WHERE id = X`, pero los contadores arrancaban en 0 y los SKU viejos (FER-001, FER-002, etc.) seguían en la tabla. El primer producto procesado sobrescribía OK, pero cuando le tocaba a otro producto que originalmente tenía `FER-001`, el `generar_sku` volvía a generar `FER-001` y colisionaba con el producto que recién se actualizó.
+
+**Fix**: Agregar `UPDATE producto SET sku = NULL WHERE empresa_id = X` ANTES de resetear contadores. Los NULLs no entran en el índice único parcial (`WHERE sku IS NOT NULL`), así que el loop puede regenerar limpiamente sin colisiones.
+
+**Estado de la base después del bug**: ~222 productos con SKU nuevo, ~364 con SKU viejo (los que estaban después en el orden y fallaron). Inconsistente pero NO dañado (Storage usa UUID, imágenes intactas).
+
+**Resolución**: Aplicar patch_17 v2 (con el fix) y volver a ejecutar el wizard. La regeneración va a SET NULL todos los SKU primero (incluyendo los nuevos) y regenerar todo limpio.
+
+**Lección**: Cuando un RPC regenera valores únicos en bulk, **primero limpiar el destino antes de regenerar**. Confiar en que el UPDATE "sobrescribe" sin conflicto es un error — puede colisionar con valores no procesados todavía.
+
+---
+
+## Resumen sesión 2026-07-30 (Topbar tasa pill + Card precio USD pill + Card height fix)
+
+### Topbar — Tasa BCV resaltada (2026-07-30)
+**Problema:** La tasa del día se veía igual que los nav items, sin resaltar视觉mente.
+
+**Fix:**
+- `.topbar-tasa` cambió de texto plano a **pill azul brillante** (`linear-gradient #0d6efd → #0b5ed7`)
+- Texto blanco, sombra sutil (`box-shadow: 0 2px 8px rgba(13,110,253,0.3)`)
+- Hover con elevación (`translateY(-1px)`, sombra más intensa)
+- Tasa desactualizada (>12h): pill rojo (`linear-gradient #dc3545 → #bb2d3b`)
+- Input de edición: fondo blanco, texto azul, sin borde
+- Label de tiempo relativo: badge pill sutil
+
+### Cards Grid — Precio USD resaltado (2026-07-30)
+**Problema:** El precio en dólares se veía igual que el resto del texto de la card.
+
+**Fix:**
+- Nuevo `.card-precio-usd`: pill azul mismo estilo que la tasa del topbar
+  - `font-size: 0.95rem`, `font-weight: 700`, `padding: 0.3rem 0.75rem`
+  - Gradiente azul, texto blanco, sombra, hover con elevación
+- Aplica en PosPage, CatalogoPage e InventarioPage (vista cuadrícula)
+- Badge "sin precio": ahora mide igual que el pill de precio
+
+### Cards Grid — Altura uniforme (2026-07-30)
+**Problema:** Cards sin precio ("sin precio") tenían distinta altura que cards con precio.
+
+**Fix:**
+- Eliminado `align-self: start` de `.card-producto` y `.pos-productos-grid .card-producto`
+- Grid ahora estira todas las cards de la misma fila a la misma altura
+- `.card-footer` con `min-height: 2rem` para consistencia
+- `.card-nombre` cambiado de `calc(1rem * var(--scale))` a `0.875rem` (14px) fijo
+
+### Archivos modificados
+| Archivo | Cambio principal |
+|---------|-----------------|
+| `index.css` | Pills tasa+precio USD, alturas uniformes, card-nombre 14px |
+| `pages/PosPage.tsx` | `<span className="card-precio-usd">` |
+| `pages/CatalogoPage.tsx` | `<span className="card-precio-usd">` |
+| `pages/InventarioPage.tsx` | `<span className="card-precio-usd">` |
+
+### Verificación
+- TypeScript: 0 errores
+- Tests: 170/170 pasan (24 archivos)
+
+### Pendiente conocido
+- RPC server-side (`aplicar_venta_offline`) necesita update para aceptar `version: 2` del payload
+- Catch silenciosos en `listarCategorias`/`obtenerMiEmpresa` (deuda conocida)
+- IVA 16% y IGTF 3% hardcoded (correcto para Venezuela actual)
 - Regla "SKU no editable" — validación server-side
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI
