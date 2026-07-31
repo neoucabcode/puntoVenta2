@@ -160,33 +160,72 @@ button { font-family: var(--font); }
   margin: 0 auto; white-space: nowrap;
 }
 .topbar-tasa {
-  display: flex; align-items: center; gap: 0.3rem;
-  font-size: var(--fs-xs); font-weight: 600; color: var(--text-primary);
-  cursor: pointer; border-radius: var(--radius-sm); padding: 0.2rem 0.4rem;
-  transition: background 0.12s;
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.95rem; font-weight: 700; color: #fff;
+  cursor: pointer; border-radius: 999px; padding: 0.35rem 0.85rem;
+  background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow:
+    0 1px 2px rgba(13,110,253,0.2),
+    0 4px 12px rgba(13,110,253,0.25),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+  transition: background 0.2s, box-shadow 0.2s, transform 0.2s, border-color 0.2s;
 }
-.topbar-tasa:hover { background: var(--surface-1); }
-.topbar-tasa-stale { color: var(--off); }
-.topbar-tasa-stale .topbar-tasa-icon { color: var(--off); }
-.topbar-tasa-icon { font-size: 1rem !important; color: var(--accent); }
-.topbar-tasa-value { font-variant-numeric: tabular-nums; }
+.topbar-tasa:hover {
+  background: linear-gradient(135deg, #0b5ed7 0%, #0a58ca 100%);
+  border-color: rgba(255,255,255,0.25);
+  box-shadow:
+    0 2px 4px rgba(13,110,253,0.25),
+    0 8px 20px rgba(13,110,253,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.15);
+  transform: translateY(-1px);
+}
+.topbar-tasa:active { transform: translateY(0); box-shadow: 0 1px 3px rgba(13,110,253,0.2); }
+.topbar-tasa-stale {
+  color: #fff;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: rgba(255,255,255,0.15);
+  box-shadow:
+    0 1px 2px rgba(239,68,68,0.25),
+    0 4px 12px rgba(239,68,68,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.topbar-tasa-stale:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border-color: rgba(255,255,255,0.25);
+  box-shadow:
+    0 2px 4px rgba(239,68,68,0.3),
+    0 8px 20px rgba(239,68,68,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.topbar-tasa-stale .topbar-tasa-icon { color: #fff; }
+.topbar-tasa-icon { font-size: 1.1rem !important; color: #fff; }
+.topbar-tasa-value { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .topbar-tasa-input {
-  width: 4.5rem; font-size: var(--fs-xs); font-weight: 600;
+  width: 4.5rem; font-size: 0.9rem; font-weight: 700;
   font-variant-numeric: tabular-nums;
-  background: var(--surface-1); color: var(--text-primary);
-  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  background: #fff; color: #0d6efd;
+  border: 1px solid rgba(13,110,253,0.2); border-radius: var(--radius-sm);
   padding: 0.15rem 0.3rem; outline: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   -moz-appearance: textfield;
 }
 .topbar-tasa-input::-webkit-outer-spin-button,
 .topbar-tasa-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.topbar-tasa-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.topbar-tasa-input:focus { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,0.2); }
 .topbar-tasa-update {
   font-size: 0.65rem; color: var(--text-muted);
-  padding: 0.1rem 0.4rem; background: var(--surface-1);
-  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.55rem; background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px; font-weight: 500;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
-.topbar-tasa-update-stale { background: rgba(220, 38, 38, 0.1); color: var(--off); }
+.topbar-tasa-update-stale {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  border-color: rgba(239, 68, 68, 0.2);
+  font-weight: 600;
+}
 
 .topbar-right { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
 
@@ -452,7 +491,7 @@ button { font-family: var(--font); }
 .card-producto {
   --scale: 1;
   background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  overflow: hidden; display: flex; flex-direction: column; align-self: start;
+  overflow: hidden; display: flex; flex-direction: column;
   transition: border-color 0.15s, transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
@@ -476,13 +515,26 @@ button { font-family: var(--font); }
 .card-info { padding: calc(0.5rem * var(--scale)) calc(0.7rem * var(--scale)); display: flex; flex-direction: column; gap: calc(0.2rem * var(--scale)); flex: 1; }
 .card-sku code { font-family: var(--mono); font-size: calc(0.65rem * var(--scale)); color: var(--text-muted); letter-spacing: 0.02em; }
 .card-nombre {
-  font-weight: 600; font-size: calc(1rem * var(--scale)); line-height: 1.2; min-height: calc(1rem * var(--scale) * 1.2 * 2);
+  font-weight: 600; font-size: 0.875rem; line-height: 1.2; min-height: calc(0.875rem * 1.2 * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;
 }
 .card-meta { font-size: calc(0.75rem * var(--scale)); color: var(--text-secondary); }
-.card-footer { display: flex; align-items: flex-end; justify-content: space-between; margin-top: calc(0.25rem * var(--scale)); gap: calc(0.4rem * var(--scale)); }
-.card-precio { font-size: calc(1.25rem * var(--scale)); font-weight: 700; color: var(--text-primary); }
-.card-precio-bs { font-size: 0.7em; color: var(--text-muted); margin-left: 0.35rem; }
+.card-footer { display: flex; align-items: flex-end; justify-content: space-between; margin-top: calc(0.25rem * var(--scale)); gap: calc(0.4rem * var(--scale)); min-height: 2rem; }
+.card-precio { font-size: calc(1.25rem * var(--scale)); font-weight: 700; color: var(--text-primary); display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
+.card-precio-usd {
+  color: #fff; font-size: 0.95rem; font-weight: 700;
+  background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+  padding: 0.3rem 0.75rem; border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(13,110,253,0.3);
+  transition: box-shadow 0.15s, transform 0.15s;
+  display: inline-flex; align-items: baseline; line-height: 1.4;
+}
+.card-producto:hover .card-precio-usd {
+  box-shadow: 0 4px 10px rgba(13,110,253,0.4);
+  transform: translateY(-1px);
+}
+.card-precio-bs { font-size: 0.65em; color: var(--text-muted); font-weight: 400; }
+.card-precio .badge { font-size: 0.95rem; padding: 0.3rem 0.75rem; }
 .card-img .card-stock {
   position: absolute; top: 0.6rem; right: 0.6rem; z-index: 2;
   font-size: 0.65rem; font-weight: 700; padding: 0.18rem 0.5rem;
@@ -812,7 +864,6 @@ button { font-family: var(--font); }
 }
 .pos-productos-grid .card-producto {
   cursor: pointer;
-  align-self: start;
   transition: border-color 0.15s, transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s;
 }
 .pos-productos-grid .card-producto:hover {
