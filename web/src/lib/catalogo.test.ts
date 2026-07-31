@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   // Storage download
   downloadBlob: null as Blob | null,
   downloadError: null as unknown,
+  downloadFailPaths: null as Set<string> | null,
   // Storage upload
   uploadPath: null as string | null,
   uploadError: null as unknown,
@@ -68,8 +69,14 @@ vi.mock('../lib/supabase', () => {
     return { select: vi.fn(() => makeSelectChain(null, null)), insert: vi.fn() }
   })
 
-  const download = vi.fn(async () => {
-    if (h.downloadError) return { data: null, error: h.downloadError }
+  const download = vi.fn(async (path: string) => {
+    // Si hay paths que deben fallar, fallar solo esos
+    if (h.downloadFailPaths?.has(path)) {
+      return { data: null, error: h.downloadError ?? new Error('not found') }
+    }
+    if (h.downloadError && !h.downloadFailPaths) {
+      return { data: null, error: h.downloadError }
+    }
     return { data: h.downloadBlob, error: null }
   })
   const upload = vi.fn(async (path: string, _blob: unknown) => {
@@ -248,7 +255,42 @@ describe('exportarCatalogo', () => {
 
     // Should still have the catalogo.json and empty-ish imagenes folder
     expect(zip.file('catalogo.json')).not.toBeNull()
-    expect(zip.file('imagenes/p1.webp')).toBeNull()
+    expect(zip.file('imagenes/FER-001.webp')).toBeNull()
+  })
+
+  it('fallback al path viejo (SKU) cuando el nuevo (UUID) no existe', async () => {
+    // Solo falla el path nuevo (UUID), el viejo (SKU) funciona
+    h.downloadFailPaths = new Set(['emp-test/p1.webp'])
+
+    const blob = await exportarCatalogo('emp-test')
+    const zip = await JSZip.loadAsync(blob)
+
+    // Debe haber descargado del path viejo y guardado como FER-001.webp
+    expect(zip.file('imagenes/FER-001.webp')).not.toBeNull()
+  })
+
+  it('cuenta y reporta imagenes faltantes (missingImages counter)', async () => {
+    // Ambos paths fallan para el producto con imagen
+    h.downloadFailPaths = new Set(['emp-test/p1.webp', 'emp-test/FER-001.webp'])
+
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const blob = await exportarCatalogo('emp-test')
+    const zip = await JSZip.loadAsync(blob)
+
+    // El ZIP no tiene la imagen, pero el catalogo.json sigue presente
+    expect(zip.file('imagenes/FER-001.webp')).toBeNull()
+    expect(zip.file('catalogo.json')).not.toBeNull()
+
+    // Debe haber logueado el warning
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('imagen no encontrada')
+    )
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('productos sin imagen')
+    )
+
+    consoleSpy.mockRestore()
   })
 
   it('lanza si empresaId es vacio', async () => {

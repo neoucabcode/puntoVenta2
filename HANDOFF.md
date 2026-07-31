@@ -97,7 +97,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-31, session: Regeneración masiva de SKU)
+## Estado actual (última actualización: 2026-07-31, session: Backfill imagenes Storage + fallback export)
 
 ### ProductoForm — Similitudes solo con foco (2026-07-29)
 **Problema:** Los dropdowns de similitudes (nombre y SKU) aparecían siempre al abrir el form de edición, y el de nombre cubría los campos de abajo con `position: absolute`.
@@ -435,6 +435,77 @@ El Excel (`catalogo_inicial.xlsx`) es una **herramienta de bootstrap**, NO una f
 - Regla "SKU no editable" — validación server-side
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI
+
+---
+
+## Resumen sesión 2026-07-31 (Backfill imagenes Storage + fallback export)
+
+### Problema
+Auditoria del ZIP exportado mostro que solo 7 de 576 imagenes referenciadas se incluian. La app muestra casi todas las imagenes bien, pero el export solo encontraba 7. **Esto es bloqueante para deploy a prod.**
+
+### Causa raiz
+- Migracion del 2026-07-28 (commit `8aa033b`) cambio el path de Storage de `${sku}.webp` a `${producto_id}.webp`
+- `subirImagenProducto` usa el path nuevo (UUID), pero los archivos viejos (~569) quedaron en el path viejo (SKU)
+- La app los muestra bien porque hace `<img src={imagen_url}>` directo — la URL en DB apunta al path viejo y el browser la carga
+- `exportarCatalogo` IGNORA la URL de la DB y construye su propio path `${empresaId}/${p.id}.webp` — falla silenciosamente
+- `patch_13_backfill_image_paths.sql` se aplico pero era audit-only; el script cliente que prometia NUNCA SE ESCRIBIO
+
+### Solucion (3 partes)
+
+**Parte 1: Fix inmediato del export con fallback**
+- `lib/catalogo.ts` exportarCatalogo ahora intenta el path nuevo (UUID), y si falla, hace fallback al viejo (SKU)
+- Ya no falla silenciosamente — loguea warnings con `console.warn`
+- Reporta al final cuantos productos quedaron sin imagen y sugiere correr el backfill
+
+**Parte 2: Script de backfill idempotente**
+- `web/src/lib/backfill-images.ts` — `backfillImagenes({ dryRun?, empresaId?, keepOld? })`
+- Detecta productos con `imagen_url` apuntando al path viejo (URL no contiene el UUID)
+- Para cada uno: descarga viejo → sube nuevo (upsert) → actualiza imagen_url en DB → borra viejo (opcional)
+- Idempotente: si el nuevo ya existe, skip
+- Logging claro con resumen al final
+- Soporta dry-run para simular sin hacer cambios
+
+**Parte 3: Tests**
+- 6 tests para el backfill (idempotencia, dry-run, skip si no existe, migracion exitosa, keepOld)
+- 3 tests nuevos para el fallback del export
+- Total: 182 tests pasan (174 anteriores + 8 nuevos)
+
+### Como usar antes de deploy a prod
+
+**Paso 1 (opcional pero recomendado): dry-run para ver cuantos se migrarian**
+```ts
+import { backfillImagenes } from './lib/backfill-images'
+const result = await backfillImagenes({ dryRun: true })
+console.log(result) // { total, migrados, yaMigrados, noEncontrados, errores }
+```
+
+**Paso 2: ejecutar el backfill real**
+```ts
+await backfillImagenes() // migra y borra viejos
+```
+
+**Paso 3: re-exportar el catalogo y verificar**
+- Las URLs en `catalogo.json` ahora apuntan al path nuevo
+- El ZIP deberia tener casi todas las imagenes
+- Si quedan `missingImages`, son productos sin archivo en Storage (no son por la migracion)
+
+**Paso 4: deploy a prod**
+- Prod tiene su propio bucket — correr el backfill ahi tambien si tiene imagenes pre-migracion
+
+### Archivos modificados
+| Archivo | Cambio |
+|---------|--------|
+| `lib/catalogo.ts` | exportarCatalogo: fallback al path viejo + warnings |
+| `lib/backfill-images.ts` | **Nuevo** — script idempotente de migracion |
+| `lib/catalogo.test.ts` | +3 tests del fallback |
+| `lib/backfill-images.test.ts` | **Nuevo** — 6 tests del backfill |
+
+### Verificacion
+- TypeScript: 0 errores
+- Tests: 182/182 pasan (26 archivos)
+
+### Lección
+**Toda migracion de path en Storage DEBE incluir un script que mueva los archivos existentes.** Un SQL audit-only no migra nada. Si esto se repite en el futuro (cambio de path, cambio de bucket, etc.), el script de migracion debe escribirse ANTES de cambiar el path de upload, no después.
 
 ---
 

@@ -107,15 +107,37 @@ export async function exportarCatalogo(empresaId: string): Promise<Blob> {
   zip.file('catalogo.json', JSON.stringify(catalogo, null, 2))
   const imgFolder = zip.folder('imagenes')!
 
-  // 5. Download images for products that have one (named by SKU for portability)
+  // 5. Download images for products that have one (named by SKU for portability).
+  // Falls back to old SKU-based path for products uploaded before the 2026-07-28
+  // UUID migration that haven't been backfilled yet.
+  let missingImages = 0
   for (const p of productos) {
     if (!p.imagen_url || !p.sku) continue
-    const filePath = `${empresaId}/${p.id}.webp`
-    const { data: blob, error: dlErr } = await supabase.storage
+    // Try new UUID-based path first
+    const newPath = `${empresaId}/${p.id}.webp`
+    let { data: blob, error: dlErr } = await supabase.storage
       .from('productos')
-      .download(filePath)
-    if (dlErr || !blob) continue // skip missing images gracefully
+      .download(newPath)
+
+    // Fallback to old SKU-based path (legacy products pre-2026-07-28)
+    if (dlErr || !blob) {
+      const oldPath = `${empresaId}/${p.sku}.webp`
+      const fallback = await supabase.storage
+        .from('productos')
+        .download(oldPath)
+      blob = fallback.data
+      dlErr = fallback.error
+    }
+
+    if (dlErr || !blob) {
+      console.warn(`[exportarCatalogo] imagen no encontrada para ${p.sku} (id ${p.id})`)
+      missingImages++
+      continue
+    }
     imgFolder.file(`${p.sku}.webp`, blob)
+  }
+  if (missingImages > 0) {
+    console.warn(`[exportarCatalogo] ${missingImages} productos sin imagen en el ZIP. Corre backfill-images para migrarlas.`)
   }
 
   return zip.generateAsync({ type: 'blob' })
