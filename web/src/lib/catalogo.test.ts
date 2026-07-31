@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { exportarCatalogo, importarCatalogo, validarCatalogoJson, type CatalogoExport } from './catalogo'
 import JSZip from 'jszip'
 
@@ -17,11 +17,11 @@ const h = vi.hoisted(() => ({
   // Insert results
   insertError: null as unknown,
   insertId: 'new-id',
-  // Storage download
-  downloadBlob: null as Blob | null,
-  downloadError: null as unknown,
-  downloadFailPaths: null as Set<string> | null,
-  // Storage upload
+  // Fetch results (for image download)
+  fetchBlob: null as Blob | null,
+  fetchError: null as unknown,
+  fetchFailUrls: null as Set<string> | null,
+  // Storage upload (used by import)
   uploadPath: null as string | null,
   uploadError: null as unknown,
 }))
@@ -69,16 +69,7 @@ vi.mock('../lib/supabase', () => {
     return { select: vi.fn(() => makeSelectChain(null, null)), insert: vi.fn() }
   })
 
-  const download = vi.fn(async (path: string) => {
-    // Si hay paths que deben fallar, fallar solo esos
-    if (h.downloadFailPaths?.has(path)) {
-      return { data: null, error: h.downloadError ?? new Error('not found') }
-    }
-    if (h.downloadError && !h.downloadFailPaths) {
-      return { data: null, error: h.downloadError }
-    }
-    return { data: h.downloadBlob, error: null }
-  })
+  // Storage upload (still used by import path)
   const upload = vi.fn(async (path: string, _blob: unknown) => {
     h.uploadPath = path
     if (h.uploadError) return { data: null, error: h.uploadError }
@@ -86,9 +77,27 @@ vi.mock('../lib/supabase', () => {
   })
   const getPublicUrl = vi.fn(() => ({ data: { publicUrl: 'https://storage.example.com/test.webp' } }))
   const remove = vi.fn(async () => ({ data: null, error: null }))
-  const storageFrom = vi.fn(() => ({ download, upload, getPublicUrl, remove }))
+  const storageFrom = vi.fn(() => ({ upload, getPublicUrl, remove }))
 
   return { supabase: { from, storage: { from: storageFrom } } }
+})
+
+// Mock global fetch — usado por exportarCatalogo para descargar imagenes desde URL
+const realFetch = globalThis.fetch
+beforeEach(() => {
+  globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+    const urlStr = typeof url === 'string' ? url : url.toString()
+    if (h.fetchFailUrls?.has(urlStr)) {
+      return new Response('not found', { status: 404 })
+    }
+    if (h.fetchError && !h.fetchFailUrls) {
+      throw h.fetchError
+    }
+    return new Response(h.fetchBlob, { status: 200 })
+  }) as typeof fetch
+})
+afterEach(() => {
+  globalThis.fetch = realFetch
 })
 
 vi.mock('../lib/empresa', () => ({
@@ -197,7 +206,7 @@ describe('exportarCatalogo', () => {
         id: 'p1', sku: 'FER-001', nombre: 'Tornillo',
         categoria_id: 'c1', unidad: 'unidad',
         costo_usd: 0.1, precio_usd: 0.25,
-        imagen_url: 'https://storage.example.com/productos/emp-test/p1.webp',
+        imagen_url: 'https://storage.example.com/productos/emp-test/FER0031.webp',
         codigo_barras: null,
       },
       {
@@ -209,8 +218,9 @@ describe('exportarCatalogo', () => {
       },
     ]
     h.prodError = null
-    h.downloadBlob = new Blob([new Uint8Array([0x52, 0x49, 0x46, 0x46])], { type: 'image/webp' })
-    h.downloadError = null
+    h.fetchBlob = new Blob([new Uint8Array([0x52, 0x49, 0x46, 0x46])], { type: 'image/webp' })
+    h.fetchError = null
+    h.fetchFailUrls = null
   })
 
   it('genera un Blob ZIP con catalogo.json e imagenes/', async () => {
@@ -248,46 +258,41 @@ describe('exportarCatalogo', () => {
     expect(zip.file('imagenes/PIN-001.webp')).toBeNull()
   })
 
-  it('maneja graciosamente productos sin imagen (download falla)', async () => {
-    h.downloadError = new Error('not found')
+  it('maneja graciosamente cuando fetch falla (HTTP 404)', async () => {
+    h.fetchFailUrls = new Set(['https://storage.example.com/productos/emp-test/FER0031.webp'])
     const { blob, missingImages } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
-    // Should still have the catalogo.json and empty-ish imagenes folder
+    // catalogo.json presente, imagenes/FER-001.webp ausente
     expect(zip.file('catalogo.json')).not.toBeNull()
     expect(zip.file('imagenes/FER-001.webp')).toBeNull()
-    expect(missingImages).toBeGreaterThan(0)
+    expect(missingImages).toBe(1)
   })
 
-  it('fallback al path viejo (SKU) cuando el nuevo (UUID) no existe', async () => {
-    // Solo falla el path nuevo (UUID), el viejo (SKU) funciona
-    h.downloadFailPaths = new Set(['emp-test/p1.webp'])
-
+  it('funciona con cualquier URL de Storage (no asume path patterns)', async () => {
+    // El URL es distinto del path "esperado" — el export DEBE descargar igual
+    // porque hace fetch directo desde imagen_url, no construye paths
     const { blob, missingImages } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
-    // Debe haber descargado del path viejo y guardado como FER-001.webp
     expect(zip.file('imagenes/FER-001.webp')).not.toBeNull()
     expect(missingImages).toBe(0)
   })
 
-  it('cuenta y reporta imagenes faltantes (missingImages counter)', async () => {
-    // Ambos paths fallan para el producto con imagen
-    h.downloadFailPaths = new Set(['emp-test/p1.webp', 'emp-test/FER-001.webp'])
+  it('cuenta y reporta imagenes faltantes con warning', async () => {
+    h.fetchFailUrls = new Set(['https://storage.example.com/productos/emp-test/FER0031.webp'])
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { blob, missingImages } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
-    // El ZIP no tiene la imagen, pero el catalogo.json sigue presente
     expect(zip.file('imagenes/FER-001.webp')).toBeNull()
     expect(zip.file('catalogo.json')).not.toBeNull()
     expect(missingImages).toBe(1)
 
-    // Debe haber logueado el warning
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('imagen no encontrada')
+      expect.stringContaining('imagen no accesible')
     )
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('productos sin imagen')
@@ -316,8 +321,16 @@ describe('exportarCatalogo', () => {
   it('zip usa compression STORE (no deflate) — verifica via API', async () => {
     const { blob } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
-    // Solo verificamos que el ZIP se genera correctamente con STORE
     expect(zip.file('catalogo.json')).not.toBeNull()
+  })
+
+  it('fetch se llama con la URL guardada en DB, sin asumir path pattern', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    await exportarCatalogo('emp-test')
+    // El fetch debe usar la URL real del producto, no un path construido
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://storage.example.com/productos/emp-test/FER0031.webp'
+    )
   })
 
   it('lanza si empresaId es vacio', async () => {

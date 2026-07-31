@@ -124,9 +124,11 @@ export async function exportarCatalogo(
   zip.file('catalogo.json', JSON.stringify(catalogo, null, 2))
   const imgFolder = zip.folder('imagenes')!
 
-  // 5. Download images in parallel batches.
-  // Falls back to old SKU-based path for products uploaded before the 2026-07-28
-  // UUID migration that haven't been backfilled yet.
+  // 5. Download images by fetching the imagen_url directly.
+  // The URL in DB is always a valid public Storage URL (bucket is public read).
+  // Fetching the URL directly avoids hard-coding path patterns that drift as the
+  // upload path evolves (see HANDOFF 2026-07-31 — 4 path patterns in Storage,
+  // export only knew 2). If the URL is unreachable, we log and skip.
   const productosConImagen = productos.filter((p) => p.imagen_url && p.sku)
   const totalImagenes = productosConImagen.length
   let missingImages = 0
@@ -138,30 +140,27 @@ export async function exportarCatalogo(
     const batch = productosConImagen.slice(i, i + DOWNLOAD_BATCH_SIZE)
     const results = await Promise.all(
       batch.map(async (p) => {
-        // Try new UUID-based path first
-        const newPath = `${empresaId}/${p.id}.webp`
-        let { data: blob, error: dlErr } = await supabase!.storage
-          .from('productos')
-          .download(newPath)
-
-        // Fallback to old SKU-based path (legacy products pre-2026-07-28)
-        if (dlErr || !blob) {
-          const oldPath = `${empresaId}/${p.sku}.webp`
-          const fallback = await supabase!.storage
-            .from('productos')
-            .download(oldPath)
-          blob = fallback.data
-          dlErr = fallback.error
+        try {
+          const res = await fetch(p.imagen_url!)
+          if (!res.ok) {
+            return { sku: p.sku, blob: null, error: new Error(`HTTP ${res.status}`) }
+          }
+          const blob = await res.blob()
+          return { sku: p.sku, blob, error: null }
+        } catch (err) {
+          return {
+            sku: p.sku,
+            blob: null,
+            error: err instanceof Error ? err : new Error(String(err)),
+          }
         }
-
-        return { sku: p.sku, blob, error: dlErr }
       })
     )
 
     for (const { sku, blob, error } of results) {
       completed++
       if (error || !blob) {
-        console.warn(`[exportarCatalogo] imagen no encontrada para ${sku}`)
+        console.warn(`[exportarCatalogo] imagen no accesible para ${sku}: ${error?.message ?? 'sin blob'}`)
         missingImages++
         continue
       }
