@@ -30,6 +30,7 @@ interface UIState {
   setInventarioAccion: (v: 'nuevo' | 'editar' | null) => void
   exportarCatalogoTrigger: number
   triggerExportarCatalogo: () => void
+  resetExportarCatalogoTrigger: () => void
   importarCatalogoTrigger: number
   triggerImportarCatalogo: () => void
 }
@@ -67,6 +68,7 @@ export const useUIStore = create<UIState>()(
       setInventarioAccion: (v) => set({ inventarioAccion: v }),
       exportarCatalogoTrigger: 0,
       triggerExportarCatalogo: () => set((s) => ({ exportarCatalogoTrigger: s.exportarCatalogoTrigger + 1 })),
+      resetExportarCatalogoTrigger: () => set({ exportarCatalogoTrigger: 0 }),
       importarCatalogoTrigger: 0,
       triggerImportarCatalogo: () => set((s) => ({ importarCatalogoTrigger: s.importarCatalogoTrigger + 1 })),
     }),

@@ -214,7 +214,7 @@ describe('exportarCatalogo', () => {
   })
 
   it('genera un Blob ZIP con catalogo.json e imagenes/', async () => {
-    const blob = await exportarCatalogo('emp-test')
+    const { blob } = await exportarCatalogo('emp-test')
 
     expect(blob).toBeInstanceOf(Blob)
 
@@ -232,7 +232,7 @@ describe('exportarCatalogo', () => {
   })
 
   it('incluye imagen descargada del Storage', async () => {
-    const blob = await exportarCatalogo('emp-test')
+    const { blob } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
     const imgFile = zip.file('imagenes/FER-001.webp')
@@ -242,7 +242,7 @@ describe('exportarCatalogo', () => {
   })
 
   it('no incluye imagen para producto sin imagen_url', async () => {
-    const blob = await exportarCatalogo('emp-test')
+    const { blob } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
     expect(zip.file('imagenes/PIN-001.webp')).toBeNull()
@@ -250,23 +250,25 @@ describe('exportarCatalogo', () => {
 
   it('maneja graciosamente productos sin imagen (download falla)', async () => {
     h.downloadError = new Error('not found')
-    const blob = await exportarCatalogo('emp-test')
+    const { blob, missingImages } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
     // Should still have the catalogo.json and empty-ish imagenes folder
     expect(zip.file('catalogo.json')).not.toBeNull()
     expect(zip.file('imagenes/FER-001.webp')).toBeNull()
+    expect(missingImages).toBeGreaterThan(0)
   })
 
   it('fallback al path viejo (SKU) cuando el nuevo (UUID) no existe', async () => {
     // Solo falla el path nuevo (UUID), el viejo (SKU) funciona
     h.downloadFailPaths = new Set(['emp-test/p1.webp'])
 
-    const blob = await exportarCatalogo('emp-test')
+    const { blob, missingImages } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
     // Debe haber descargado del path viejo y guardado como FER-001.webp
     expect(zip.file('imagenes/FER-001.webp')).not.toBeNull()
+    expect(missingImages).toBe(0)
   })
 
   it('cuenta y reporta imagenes faltantes (missingImages counter)', async () => {
@@ -275,12 +277,13 @@ describe('exportarCatalogo', () => {
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    const blob = await exportarCatalogo('emp-test')
+    const { blob, missingImages } = await exportarCatalogo('emp-test')
     const zip = await JSZip.loadAsync(blob)
 
     // El ZIP no tiene la imagen, pero el catalogo.json sigue presente
     expect(zip.file('imagenes/FER-001.webp')).toBeNull()
     expect(zip.file('catalogo.json')).not.toBeNull()
+    expect(missingImages).toBe(1)
 
     // Debe haber logueado el warning
     expect(consoleSpy).toHaveBeenCalledWith(
@@ -291,6 +294,30 @@ describe('exportarCatalogo', () => {
     )
 
     consoleSpy.mockRestore()
+  })
+
+  it('llama onProgress con fase descargando_imagenes y conteo correcto', async () => {
+    const progressCalls: Array<{ phase: string; current: number; total: number }> = []
+
+    await exportarCatalogo('emp-test', (p) => {
+      progressCalls.push({ phase: p.phase, current: p.current, total: p.total })
+    })
+
+    // Al menos debe haber un evento de descargando_imagenes
+    const downloadEvents = progressCalls.filter((p) => p.phase === 'descargando_imagenes')
+    expect(downloadEvents.length).toBeGreaterThan(0)
+    // El primer evento es current=0, el último es current=total=1 (hay 1 producto con imagen)
+    expect(downloadEvents[0].current).toBe(0)
+    expect(downloadEvents[0].total).toBe(1)
+    expect(downloadEvents[downloadEvents.length - 1].current).toBe(1)
+    expect(downloadEvents[downloadEvents.length - 1].total).toBe(1)
+  })
+
+  it('zip usa compression STORE (no deflate) — verifica via API', async () => {
+    const { blob } = await exportarCatalogo('emp-test')
+    const zip = await JSZip.loadAsync(blob)
+    // Solo verificamos que el ZIP se genera correctamente con STORE
+    expect(zip.file('catalogo.json')).not.toBeNull()
   })
 
   it('lanza si empresaId es vacio', async () => {

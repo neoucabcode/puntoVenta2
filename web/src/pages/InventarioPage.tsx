@@ -12,7 +12,7 @@ import {
   type Categoria,
 } from '../lib/productos'
 import { obtenerMiEmpresaId } from '../lib/empresa'
-import { exportarCatalogo } from '../lib/catalogo'
+import { exportarCatalogo, type ExportProgress } from '../lib/catalogo'
 import { useUIStore } from '../lib/ui-store'
 import { ProductoForm } from '../components/ProductoForm'
 import { ProductoSearchModal } from '../components/ProductoSearchModal'
@@ -40,6 +40,7 @@ export function InventarioPage() {
   const inventarioAccion = useUIStore((s) => s.inventarioAccion)
   const setInventarioAccion = useUIStore((s) => s.setInventarioAccion)
   const exportarCatalogoTrigger = useUIStore((s) => s.exportarCatalogoTrigger)
+  const resetExportarCatalogoTrigger = useUIStore((s) => s.resetExportarCatalogoTrigger)
   const importarCatalogoTrigger = useUIStore((s) => s.importarCatalogoTrigger)
   const tasaBCV = useCajaStore((s) => s.tasaBCV)
 
@@ -56,6 +57,8 @@ export function InventarioPage() {
   const [deleteSaving, setDeleteSaving] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showSearchModal, setShowSearchModal] = useState(false)
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null)
+  const exportInProgress = useRef(false)
 
   const gridScrollRef = useRef<HTMLDivElement | null>(null)
   const listaScrollRef = useRef<HTMLDivElement | null>(null)
@@ -102,7 +105,14 @@ export function InventarioPage() {
 
   // Listen for topbar export trigger
   useEffect(() => {
-    if (exportarCatalogoTrigger > 0) void onExportarCatalogo()
+    if (exportarCatalogoTrigger > 0) {
+      void onExportarCatalogo()
+      // Reset trigger para no reprocesar en el siguiente render
+      resetExportarCatalogoTrigger()
+    }
+    // onExportarCatalogo no es estable (no es useCallback) — intencional,
+    // el guard exportInProgress.current maneja re-entrada
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportarCatalogoTrigger])
 
   // Listen for topbar import trigger
@@ -160,19 +170,34 @@ export function InventarioPage() {
   }
 
   async function onExportarCatalogo() {
+    // Guard: si ya hay un export corriendo, ignorar clicks/triggers adicionales
+    if (exportInProgress.current) {
+      console.log('[Inventario] export ya en curso, ignorando trigger adicional')
+      return
+    }
+    exportInProgress.current = true
     setActionError('')
+    setExportProgress(null)
     try {
       const empresaId = await obtenerMiEmpresaId()
       if (!empresaId) throw new Error('No se pudo determinar la empresa')
-      const blob = await exportarCatalogo(empresaId)
-      const url = URL.createObjectURL(blob)
+      const result = await exportarCatalogo(empresaId, (p) => {
+        setExportProgress(p)
+      })
+      const url = URL.createObjectURL(result.blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `catalogo-${new Date().toISOString().slice(0, 10)}.zip`
       a.click()
       URL.revokeObjectURL(url)
+      if (result.missingImages > 0) {
+        console.warn(`Export completo: ${result.missingImages} imagenes faltantes`)
+      }
     } catch (err) {
       setActionError((err as Error).message)
+    } finally {
+      setExportProgress(null)
+      exportInProgress.current = false
     }
   }
 
@@ -255,6 +280,17 @@ export function InventarioPage() {
       <div className="inv-body">
         <main className="inv-main">
           {(error || actionError) && <p className="error">{error || actionError}</p>}
+
+          {exportProgress && (
+            <div className="inv-export-progress" role="status" aria-live="polite">
+              <span className="config-loading-spinner" />
+              <span>
+                {exportProgress.phase === 'descargando_imagenes'
+                  ? `Descargando imagenes ${exportProgress.current}/${exportProgress.total}…`
+                  : `Empaquetando ZIP ${exportProgress.current}%…`}
+              </span>
+            </div>
+          )}
 
           {loading ? (
             <p>Cargando…</p>

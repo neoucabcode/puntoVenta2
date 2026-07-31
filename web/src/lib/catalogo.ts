@@ -24,11 +24,25 @@ export type ImportProgress = {
   total: number
 }
 
+export type ExportProgress = {
+  phase: 'descargando_imagenes' | 'empaquetando_zip'
+  current: number
+  total: number
+}
+
 export type ImportResult = {
   imported: number
   categories: number
   errors: string[]
 }
+
+export type ExportResult = {
+  blob: Blob
+  missingImages: number
+}
+
+/** Batch size for parallel image downloads. 10 balances throughput and avoids saturating the network. */
+const DOWNLOAD_BATCH_SIZE = 10
 
 // ─── Export ──────────────────────────────────────────────────────────
 
@@ -53,7 +67,10 @@ export function validarCatalogoJson(json: unknown): json is CatalogoExport {
   return true
 }
 
-export async function exportarCatalogo(empresaId: string): Promise<Blob> {
+export async function exportarCatalogo(
+  empresaId: string,
+  onProgress?: (progress: ExportProgress) => void
+): Promise<ExportResult> {
   if (!supabase) throw new Error('No hay conexion con la base de datos')
   if (!empresaId) throw new Error('No se pudo determinar la empresa')
 
@@ -107,40 +124,75 @@ export async function exportarCatalogo(empresaId: string): Promise<Blob> {
   zip.file('catalogo.json', JSON.stringify(catalogo, null, 2))
   const imgFolder = zip.folder('imagenes')!
 
-  // 5. Download images for products that have one (named by SKU for portability).
+  // 5. Download images in parallel batches.
   // Falls back to old SKU-based path for products uploaded before the 2026-07-28
   // UUID migration that haven't been backfilled yet.
+  const productosConImagen = productos.filter((p) => p.imagen_url && p.sku)
+  const totalImagenes = productosConImagen.length
   let missingImages = 0
-  for (const p of productos) {
-    if (!p.imagen_url || !p.sku) continue
-    // Try new UUID-based path first
-    const newPath = `${empresaId}/${p.id}.webp`
-    let { data: blob, error: dlErr } = await supabase.storage
-      .from('productos')
-      .download(newPath)
+  let completed = 0
 
-    // Fallback to old SKU-based path (legacy products pre-2026-07-28)
-    if (dlErr || !blob) {
-      const oldPath = `${empresaId}/${p.sku}.webp`
-      const fallback = await supabase.storage
-        .from('productos')
-        .download(oldPath)
-      blob = fallback.data
-      dlErr = fallback.error
+  onProgress?.({ phase: 'descargando_imagenes', current: 0, total: totalImagenes })
+
+  for (let i = 0; i < productosConImagen.length; i += DOWNLOAD_BATCH_SIZE) {
+    const batch = productosConImagen.slice(i, i + DOWNLOAD_BATCH_SIZE)
+    const results = await Promise.all(
+      batch.map(async (p) => {
+        // Try new UUID-based path first
+        const newPath = `${empresaId}/${p.id}.webp`
+        let { data: blob, error: dlErr } = await supabase!.storage
+          .from('productos')
+          .download(newPath)
+
+        // Fallback to old SKU-based path (legacy products pre-2026-07-28)
+        if (dlErr || !blob) {
+          const oldPath = `${empresaId}/${p.sku}.webp`
+          const fallback = await supabase!.storage
+            .from('productos')
+            .download(oldPath)
+          blob = fallback.data
+          dlErr = fallback.error
+        }
+
+        return { sku: p.sku, blob, error: dlErr }
+      })
+    )
+
+    for (const { sku, blob, error } of results) {
+      completed++
+      if (error || !blob) {
+        console.warn(`[exportarCatalogo] imagen no encontrada para ${sku}`)
+        missingImages++
+        continue
+      }
+      // STORE (no compression) — webp is already compressed, DEFLATE just adds CPU cost
+      imgFolder.file(`${sku}.webp`, blob, { compression: 'STORE' })
     }
 
-    if (dlErr || !blob) {
-      console.warn(`[exportarCatalogo] imagen no encontrada para ${p.sku} (id ${p.id})`)
-      missingImages++
-      continue
-    }
-    imgFolder.file(`${p.sku}.webp`, blob)
+    onProgress?.({
+      phase: 'descargando_imagenes',
+      current: completed,
+      total: totalImagenes,
+    })
   }
+
   if (missingImages > 0) {
     console.warn(`[exportarCatalogo] ${missingImages} productos sin imagen en el ZIP. Corre backfill-images para migrarlas.`)
   }
 
-  return zip.generateAsync({ type: 'blob' })
+  // 6. Generate ZIP
+  const blob = await zip.generateAsync(
+    { type: 'blob', compression: 'STORE' },
+    (metadata) => {
+      onProgress?.({
+        phase: 'empaquetando_zip',
+        current: Math.round(metadata.percent),
+        total: 100,
+      })
+    }
+  )
+
+  return { blob, missingImages }
 }
 
 // ─── Import ──────────────────────────────────────────────────────────

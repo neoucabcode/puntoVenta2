@@ -38,7 +38,7 @@ export function RegenerarSkuWizard({ onClose }: Props) {
     if (!config) return
     setExporting(true)
     try {
-      const blob = await exportarCatalogo(config.empresa_id)
+      const { blob } = await exportarCatalogo(config.empresa_id)
       // Trigger browser download
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
