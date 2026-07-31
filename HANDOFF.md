@@ -97,7 +97,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-31, session: Backfill imagenes Storage + fallback export)
+## Estado actual (última actualización: 2026-07-31, session: Fix real export imagenes via fetch + paralelismo)
 
 ### ProductoForm — Similitudes solo con foco (2026-07-29)
 **Problema:** Los dropdowns de similitudes (nombre y SKU) aparecían siempre al abrir el form de edición, y el de nombre cubría los campos de abajo con `position: absolute`.
@@ -506,6 +506,71 @@ await backfillImagenes() // migra y borra viejos
 
 ### Lección
 **Toda migracion de path en Storage DEBE incluir un script que mueva los archivos existentes.** Un SQL audit-only no migra nada. Si esto se repite en el futuro (cambio de path, cambio de bucket, etc.), el script de migracion debe escribirse ANTES de cambiar el path de upload, no después.
+
+---
+
+## Resumen sesion 2026-07-31 (FIX REAL: fetch desde imagen_url + paralelismo)
+
+### Problema real (descubierto inspeccionando el ZIP del usuario)
+Despues del "fix" del backfill, el export seguia mostrando solo 7 imagenes en el ZIP. El usuario descomprimio el archivo y me mostro que solo 7 de 576 imagenes referenciadas estaban alli.
+
+### Causa raiz (verificada con queries SQL a Storage)
+Inspeccion de las URLs reales en la DB mostro que existen **4 patrones coexistiendo** en Storage porque las imagenes se subieron en distintas epocas con distintos sistemas:
+
+| Patron | Cantidad | Descargaba el export? |
+|---|---|---|
+| `productos/<empresa>/<uuid>.webp` (NUEVO) | 7 | SI |
+| `productos/<archivo>.webp` (raiz, sin empresa) | 253 | NO |
+| `productos/<empresa>/<sku-corrupto>.webp` | 316 | NO |
+
+El codigo del export construia paths asumiendo patrones especificos (`${empresaId}/${productoId}.webp` o `${empresaId}/${sku}.webp`). Pero los SKUs en Storage son `FER0031`, `FER0046`, etc. — NO coinciden con los SKUs actuales de la DB (que fueron regenerados en patch_15).
+
+### Fix (commit f60581f)
+**Eliminar la construccion de paths. Usar fetch() directo con la imagen_url guardada en DB.**
+
+```ts
+// Antes: construir paths asumiendo patrones
+const newPath = `${empresaId}/${p.id}.webp`
+await supabase.storage.from('productos').download(newPath)
+const oldPath = `${empresaId}/${p.sku}.webp`
+await supabase.storage.from('productos').download(oldPath)
+
+// Ahora: fetch directo desde la URL guardada
+const res = await fetch(p.imagen_url)
+const blob = await res.blob()
+imgFolder.file(`${p.sku}.webp`, blob, { compression: 'STORE' })
+```
+
+Esa URL SIEMPRE apunta al archivo real en Storage (es la misma que usa el browser para mostrar la imagen en la app). Funciona para TODOS los patrones.
+
+### Mejoras adicionales incluidas
+- **Paralelismo**: downloads en batches de 10 (no mas 60-90s para 576 imagenes)
+- **Progreso visible**: onProgress callback con fase 'descargando_imagenes' / 'empaquetando_zip'
+- **STORE compression** en el ZIP: webp ya esta comprimido, DEFLATE solo gasta CPU
+- **Guard contra multiples triggers**: useRef exportInProgress evita ZIPs duplicados al clickear varias veces
+- **Retorna { blob, missingImages }** en vez de solo blob: la UI puede reportar cuantos fallaron
+
+### Archivos modificados
+| Archivo | Cambio |
+|---------|--------|
+| `lib/catalogo.ts` | fetch desde imagen_url, paralelismo, onProgress, STORE |
+| `lib/catalogo.test.ts` | mock de fetch, 24 tests del export |
+| `lib/ui-store.ts` | resetExportarCatalogoTrigger |
+| `pages/InventarioPage.tsx` | guard exportInProgress, indicador de progreso visual |
+| `components/RegenerarSkuWizard.tsx` | usa nueva firma { blob } |
+| `index.css` | estilo .inv-export-progress |
+
+### Verificacion
+- TypeScript: 0 errores
+- Tests: 185/185 pasan (26 archivos)
+
+### Pendiente
+- Probar el export en dev: deberia descargar ~576 imagenes (no 7)
+- Si siguen faltando algunas, son URLs invalidas en DB (no archivos fisicos)
+- Backfill script de antes queda como redundante — el fetch resuelve el problema sin migrar Storage
+
+### Lección
+**NUNCA construir paths en codigo cuando el dato ya esta en la DB.** La `imagen_url` ya es la fuente de verdad — el browser la usa directo para mostrar la imagen. Asumir patrones de Storage es fragil: cada cambio historico deja huerfanos que el codigo no encuentra.
 
 ---
 
