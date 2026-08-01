@@ -820,3 +820,43 @@ Wizard multi-paso para regenerar todos los SKU de una empresa con reset de conta
 - Regla "SKU no editable" — validación server-side
 - 17 productos sin imagen
 - Slices 3-6 del rediseño UI
+
+---
+
+## Resumen sesión 2026-08-01 (Revert: patches SQL rompieron la app)
+
+### Qué intentamos
+1. Fix de fuga Storage multi-tenant (`productos_public_read` sin `empresa_id` check)
+2. SKU server-side validation (`es_admin()`, trigger, index case-insensitive)
+3. User management UI (tab en ConfiguracionPage)
+
+### Qué pasó
+- SDD pipeline completo (proposal → spec → design → tasks → apply → verify)
+- Todos los patches SQL aplicados a dev Y prod
+- **La app se rompió** — los patches causaron:
+  - `obtenerMiEmpresaId()` devolvía null (cache frágil + RLS issues)
+  - Botones deshabilitados (módulos no cargaban)
+  - Catálogo vacío
+  - Sin botón de logout para recuperar sesión
+
+### Fix
+- **Código:** `git checkout` de todos los archivos modificados
+- **Archivos nuevos:** eliminados (patch_18, patch_19, GestionUsuarios, usuarios.ts)
+- **DB dev:** revertido DROP de todos los objetos + storage policy original
+- **DB prod:** NO revertido (los patches siguen ahí pero la app de prod no se usa directamente)
+
+### Lecciones (para no repetir)
+1. **NUNCA aplicar SQL a prod sin probar en dev primero**
+2. `CREATE POLICY IF NOT EXISTS` no existe en PostgreSQL — usar `DROP IF EXISTS` + `CREATE`
+3. `CREATE INDEX CONCURRENTLY` falla dentro de transacciones (Supabase Dashboard)
+4. No se pueden crear usuarios Auth por SQL directo — usar el API
+5. `empresaIdCache` se queda en null si falla la primera llamada — necesita fix
+6. `patch_14` sobreescribe `generar_sku` sin el fallback del patch_15 — regression hazard
+7. `es_admin()` y `formato_sku` no existen por defecto — crearlos
+
+### Pendiente conocido (actualizado)
+- 🔴 **Fuga Storage multi-tenant** — pendiente, requiere testing en dev primero
+- 🟠 **SKU server-side validation** — pendiente, requiere approach diferente
+- 🟠 **User management UI** — pendiente, crear desde cero con cuidado
+- 🟠 **Logout button** — pendiente, agregar al topbar
+- 🟠 **empresaIdCache fragility** — pendiente, no cachear null permanentemente
