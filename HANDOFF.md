@@ -97,7 +97,7 @@ nunca ve los datos de "El Martillo" ni viceversa.
 >   (SELECT COUNT(*) FROM venta_offline_event WHERE estado_sync = 'pendiente') AS ventas_pendientes_sync;
 > ```
 
-## Estado actual (última actualización: 2026-07-31, session: Fix real export imagenes via fetch + paralelismo)
+## Estado actual (última actualización: 2026-08-01, session: Logout + theme toggle + DB cleanup)
 
 ### ProductoForm — Similitudes solo con foco (2026-07-29)
 **Problema:** Los dropdowns de similitudes (nombre y SKU) aparecían siempre al abrir el form de edición, y el de nombre cubría los campos de abajo con `position: absolute`.
@@ -858,5 +858,51 @@ Wizard multi-paso para regenerar todos los SKU de una empresa con reset de conta
 - 🔴 **Fuga Storage multi-tenant** — pendiente, requiere testing en dev primero
 - 🟠 **SKU server-side validation** — pendiente, requiere approach diferente
 - 🟠 **User management UI** — pendiente, crear desde cero con cuidado
-- 🟠 **Logout button** — pendiente, agregar al topbar
 - 🟠 **empresaIdCache fragility** — pendiente, no cachear null permanentemente
+
+---
+
+## Resumen sesión 2026-08-01 (Logout + Theme toggle + DB cleanup)
+
+### Logout button
+- **TopbarUnificada.tsx:** nuevo botón `logout` (icono `logout`) junto al avatar
+- Llama `logout()` de `lib/auth.ts` → `signOut()` → redirect a `/login`
+- Hover rojo sutil (`rgba(220,53,69,0.12)`)
+
+### Theme toggle (dark/light)
+- **TopbarUnificada.tsx:** nuevo botón `light_mode`/`dark_mode` en topbar-right
+- Usa `toggleTheme()` del `useUIStore` (ya existía pero no tenía botón)
+- `main.tsx` ya aplicaba `data-theme` al `<html>` — solo faltaba el trigger
+- Persiste en localStorage (`pv-ui`)
+
+### Limpieza de avatar
+- Eliminado el avatar (círculo con inicial del email) del topbar
+- Eliminado import de `useAuth` (ya no se usaba)
+
+### DB Prod — Limpieza de duplicados
+- **Problema:** 2 empresas "FerrehogarMart" en prod, Neo vinculado a la duplicada
+- **Fix:** Move Neo (`7f11ff2e-...`) de empresa duplicada (`e2bedbac`) a original (`b72bb1ff`)
+- **Fix:** Delete empresa duplicada (0 productos, 0 ventas, 0 cajas)
+- **Fix:** Create `ferrehogarmart@gmail.com` en Auth (Dashboard) → asociado a FerrehogarMart
+- **Fix:** Rename usuario de "Neo" a "FerrehogarMart" en tabla `usuario`
+
+### Estado DB Prod (post-cleanup)
+| Empresa | Usuario Auth | Rol | Módulos |
+|---------|-------------|-----|---------|
+| FerrehogarMart (`b72bb1ff`) | `ferrehogarmart@gmail.com` | admin | solo catálogo |
+
+### Archivos modificados
+| Archivo | Cambio |
+|---------|--------|
+| `components/TopbarUnificada.tsx` | +logout, +theme toggle, -avatar, -useAuth import |
+| `index.css` | +`.topbar-logout-btn:hover` |
+
+### Verificación
+- TypeScript: 0 errores
+- Tests: 185/185 pasan (26 archivos)
+- Git: develop, commit `08ee94e` (+ 1 push pendiente)
+
+### Pendiente inmediato
+- **Deploy a prod:** develop tiene 32 commits adelante de master (8193+ líneas)
+- **Habilitar módulos en prod:** solo catálogo está activo, faltan venta/inventario/caja/reportes
+- **DB Dev:** pendiente limpiar "Dueño" y dejar solo "Neo" (`neoucabcode@gmail.com`)
