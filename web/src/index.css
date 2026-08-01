@@ -153,6 +153,7 @@ button { font-family: var(--font); }
 .topbar-nav-btn:hover { background: var(--surface-1); color: var(--text-primary); }
 .topbar-nav-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .topbar-nav-btn .material-symbols-outlined { font-size: 1.15rem; }
+.topbar-logout-btn:hover { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
 
 /* Center: tasa BCV */
 .topbar-center {

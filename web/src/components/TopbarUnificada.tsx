@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
-import { useAuth } from '../lib/auth-context'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useUIStore } from '../lib/ui-store'
 import { useCajaStore } from '../store/useCajaStore'
 import { abrirCaja, cerrarCaja } from '../lib/caja'
 import { leerTasaSincronizada } from '../lib/tasaSync'
+import { logout } from '../lib/auth'
 import { SyncStatus } from './SyncStatus'
 import { HistorialVenta } from './HistorialVenta'
 import { useUsuarioRol } from '../hooks/useUsuarioRol'
@@ -34,10 +34,12 @@ function fmtTiempoRelativo(iso: string | null): string {
 }
 
 export function TopbarUnificada() {
-  const { session } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const setDrawer = useUIStore((s) => s.setDrawer)
+  const theme = useUIStore((s) => s.theme)
+  const toggleTheme = useUIStore((s) => s.toggleTheme)
 
   const soloActivos = useUIStore((s) => s.soloActivos)
   const toggleSoloActivos = useUIStore((s) => s.toggleSoloActivos)
@@ -170,7 +172,12 @@ export function TopbarUnificada() {
     } catch { /* silently reflected by refrescar */ }
   }
 
-  const initials = (session?.user?.email ?? '?').slice(0, 1).toUpperCase()
+  async function handleLogout() {
+    try {
+      await logout()
+      navigate('/login')
+    } catch { /* silent — auth context will reflect the state */ }
+  }
 
   return (
     <header className="topbar-unified">
@@ -334,7 +341,7 @@ export function TopbarUnificada() {
         </span>
       </div>
 
-      {/* ——— Right: status + config + avatar ——— */}
+      {/* ——— Right: status + config + theme + logout + avatar ——— */}
       <div className="topbar-right">
         <SyncStatus />
 
@@ -342,10 +349,26 @@ export function TopbarUnificada() {
           <span className="material-symbols-outlined">settings</span>
         </NavLink>
 
-        {/* Avatar — minimal, just initials as visual element */}
-        <div className="topbar-avatar">
-          {initials}
-        </div>
+        <button
+          className="topbar-nav-btn"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+        >
+          <span className="material-symbols-outlined">
+            {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+          </span>
+        </button>
+
+        <button
+          className="topbar-nav-btn topbar-logout-btn"
+          onClick={handleLogout}
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
+        >
+          <span className="material-symbols-outlined">logout</span>
+        </button>
+
       </div>
     </header>
   )
